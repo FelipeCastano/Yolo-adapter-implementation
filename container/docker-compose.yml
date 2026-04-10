@@ -1,12 +1,10 @@
-version: '3.9'
-
 services:
   mlflow-server:
     image: ghcr.io/mlflow/mlflow:v2.9.2
     ports:
       - "5000:5000"
     volumes:
-      - ../app/model_store:/mlflow
+      - ../model_storage:/mlflow
     environment:
       - MLFLOW_BACKEND_STORE_URI=/mlflow/mlruns
       - MLFLOW_ARTIFACT_ROOT=/mlflow/artifacts
@@ -21,29 +19,66 @@ services:
       - 0.0.0.0
       - --port
       - "5000"
-      
-  trainer:
+    networks:
+      - app-network
+
+  data-pipeline:
     build:
       context: .
-      dockerfile: Dockerfile_mlflow
+      dockerfile: Dockerfile_data_pipeline
     volumes:
       - ../src:/app/src
       - ../data:/app/data
-      - ../model_store:/app/model_store
-    environment:
-      - MLFLOW_TRACKING_URI=file:/app/model_store/mlruns
+      - ../model_storage:/app/model_storage
     working_dir: /app
-    command: python /app/src/model/model_manager.py
+    command: >
+      sh -c "python /app/src/data_management/preprocessed_dataset.py"
+    networks:
+      - app-network
+
+  trainer:
+    build:
+      context: .
+      dockerfile: Dockerfile_trainer
+    volumes:
+      - ../src:/app/src
+      - ../data:/app/data
+      - ../model_storage:/app/model_storage
+      - ../results:/app/results
+    environment:
+      - MLFLOW_TRACKING_URI=http://mlflow-server:5000
+      - GIT_PYTHON_REFRESH=quiet
+    depends_on:
+      - mlflow-server
+    working_dir: /app
+    command: python /app/src/model/trainer_manager.py
+    networks:
+      - app-network
+  trainer-gpu:
+    extends:
+      service: trainer
+    shm_size: '8gb'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - app-network
 
   mar-builder:
     build:
       context: .
       dockerfile: Dockerfile_marbuilder
     volumes:
-      - ../model_store:/app/model_store
-      - ../src/model:/app/model
+      - ../model_storage:/app/model_storage
+      - ../src:/app/
     working_dir: /app
-    command: /app/model_store/create_mar.sh
+    command: /app/model_storage/create_mar.sh
+    networks:
+      - app-network
 
   torchserve:
     build:
@@ -54,11 +89,60 @@ services:
       - "8080:8080"
       - "8081:8081"
     volumes:
-      - ../model_store:/home/model-server/model-store
-      - ../model_store/torchserve_config/config.properties:/home/model-server/config.properties
+      - ../model_storage:/home/model-server/model-store
+      - ../model_storage/torchserve_config/config.properties:/home/model-server/config.properties
     working_dir: /home/model-server
     command: >
       torchserve --ts-config /home/model-server/config.properties
                  --model-store /home/model-server/model-store
-                 --models simple_model=simple_model.mar
+                 --models electronic_symbol_detector=electronic_symbol_detector.mar
                  --foreground
+    networks:
+      - app-network
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile_back
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../src/backend:/app/backend
+      - ../src/data_management:/app/data_management
+      - ../src/model:/app/model
+      - ../data:/app/data
+    depends_on:
+      - torchserve
+    working_dir: /app
+    networks:
+      - app-network
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile_front
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+      - docs
+      - mlflow-server
+    volumes:
+      - ../src/frontend:/app/
+      - ../docs:/app/docs
+    working_dir: /app
+    networks:
+      - app-network
+  docs:
+    build:
+      context: .
+      dockerfile: Dockerfile_docs
+    ports:
+      - "8889:8888"  # ← cambiar puerto externo
+    volumes:
+      - ../docs/build/html:/app/html:ro
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

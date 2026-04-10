@@ -1,0 +1,16 @@
+path: /app/data/aug_data/
+
+train: train
+val:   val
+test:  original_img_test
+
+nc: 7
+
+names:
+  0: Capacitor
+  1: Inductor
+  2: Resistor
+  3: DC_VS
+  4: AC_VS
+  5: Connection_Node
+  6: Gnd
