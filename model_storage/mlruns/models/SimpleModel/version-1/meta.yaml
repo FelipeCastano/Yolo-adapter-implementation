@@ -1,0 +1,14 @@
+aliases: []
+creation_timestamp: 1748685369343
+current_stage: None
+description: null
+last_updated_timestamp: 1748685369343
+name: SimpleModel
+run_id: b70c990794ec4d08884ae16fdffacd18
+run_link: null
+source: /app/model_store/mlruns/0/b70c990794ec4d08884ae16fdffacd18/artifacts/model
+status: READY
+status_message: null
+storage_location: /app/model_store/mlruns/0/b70c990794ec4d08884ae16fdffacd18/artifacts/model
+user_id: null
+version: 1

@@ -1,0 +1,14 @@
+aliases: []
+creation_timestamp: 1748699691713
+current_stage: None
+description: ''
+last_updated_timestamp: 1748699691713
+name: SimpleModel
+run_id: ba59dc11cb2c4057b848cb934ac8c01c
+run_link: ''
+source: /mlflow/artifacts/0/ba59dc11cb2c4057b848cb934ac8c01c/artifacts/model
+status: READY
+status_message: null
+storage_location: /mlflow/artifacts/0/ba59dc11cb2c4057b848cb934ac8c01c/artifacts/model
+user_id: null
+version: 3

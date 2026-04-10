@@ -1,0 +1,16 @@
+artifact_uri: /mlflow/artifacts/973625150337049452/f7a03c128f9a4a489647e72bf0aa7e3f/artifacts
+deleted_time: 1752592326795
+end_time: 1752592316011
+entry_point_name: ''
+experiment_id: '973625150337049452'
+lifecycle_stage: deleted
+run_id: f7a03c128f9a4a489647e72bf0aa7e3f
+run_name: lr=0.001_fld=1_ep=15
+run_uuid: f7a03c128f9a4a489647e72bf0aa7e3f
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1752592306931
+status: 4
+tags: []
+user_id: felipe

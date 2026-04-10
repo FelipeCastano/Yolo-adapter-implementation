@@ -1,0 +1,15 @@
+artifact_uri: /mlflow/artifacts/0/3237f5c1dfdb48afb4c826a75a621f1f/artifacts
+end_time: 1748685957202
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: 3237f5c1dfdb48afb4c826a75a621f1f
+run_name: nebulous-colt-144
+run_uuid: 3237f5c1dfdb48afb4c826a75a621f1f
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1748685954506
+status: 3
+tags: []
+user_id: root

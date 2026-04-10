@@ -1,0 +1,8 @@
+torch==2.1.0
+torchvision==0.16.0
+torchserve==0.10.0
+torch-model-archiver==0.10.0
+pyyaml==6.0
+numpy==1.24.4
+scikit-learn==1.3.2
+joblib==1.3.2

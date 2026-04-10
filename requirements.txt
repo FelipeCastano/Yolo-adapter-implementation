@@ -1,0 +1,8 @@
+torch==2.1.0
+numpy==1.25.2
+torch-model-archiver==0.11.1
+mlflow
+pandas
+scikit-learn
+torchserve
+

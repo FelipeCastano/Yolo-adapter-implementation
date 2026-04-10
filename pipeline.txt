@@ -1,0 +1,19 @@
++-------------------+
+|   Datos crudos    |
++--------+----------+
+         |
+         v
++--------+----------+             +-----------------------+
+|  Entrenamiento     | ---------> | Registro en MLflow    |
+|  (PyTorch)         |            | (con modelo y métricas)|
++--------+----------+             +-----------------------+
+         |
+         v
++--------+----------+
+|  Empaquetado      | ---> Docker + TorchServe
++--------+----------+
+         |
+         v
++--------+----------+
+|  Despliegue       | ---> K8s con Kubeflow (y opc. KFServing)
++-------------------+

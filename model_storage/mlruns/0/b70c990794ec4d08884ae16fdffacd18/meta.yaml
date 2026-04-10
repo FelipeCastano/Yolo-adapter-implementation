@@ -1,0 +1,15 @@
+artifact_uri: /app/model_store/mlruns/0/b70c990794ec4d08884ae16fdffacd18/artifacts
+end_time: 1748685369349
+entry_point_name: ''
+experiment_id: '0'
+lifecycle_stage: active
+run_id: b70c990794ec4d08884ae16fdffacd18
+run_name: omniscient-slug-776
+run_uuid: b70c990794ec4d08884ae16fdffacd18
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1748685367240
+status: 3
+tags: []
+user_id: root

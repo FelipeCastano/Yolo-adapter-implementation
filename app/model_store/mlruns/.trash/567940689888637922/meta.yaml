@@ -1,0 +1,7 @@
+artifact_location: /mlflow/artifacts/567940689888637922
+creation_time: 1752592331673
+experiment_id: '567940689888637922'
+last_update_time: 1752592356092
+lifecycle_stage: deleted
+name: Transformer_Classifier_BPE_100
+tags: {}

@@ -1,0 +1,64 @@
+version: '3.9'
+
+services:
+  mlflow-server:
+    image: ghcr.io/mlflow/mlflow:v2.9.2
+    ports:
+      - "5000:5000"
+    volumes:
+      - ../app/model_store:/mlflow
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=/mlflow/mlruns
+      - MLFLOW_ARTIFACT_ROOT=/mlflow/artifacts
+    command:
+      - mlflow
+      - server
+      - --backend-store-uri
+      - /mlflow/mlruns
+      - --default-artifact-root
+      - /mlflow/artifacts
+      - --host
+      - 0.0.0.0
+      - --port
+      - "5000"
+      
+  trainer:
+    build:
+      context: .
+      dockerfile: Dockerfile_mlflow
+    volumes:
+      - ../src:/app/src
+      - ../data:/app/data
+      - ../model_store:/app/model_store
+    environment:
+      - MLFLOW_TRACKING_URI=file:/app/model_store/mlruns
+    working_dir: /app
+    command: python /app/src/model/model_manager.py
+
+  mar-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile_marbuilder
+    volumes:
+      - ../model_store:/app/model_store
+      - ../src/model:/app/model
+    working_dir: /app
+    command: /app/model_store/create_mar.sh
+
+  torchserve:
+    build:
+      context: .
+      dockerfile: Dockerfile_torchserve
+    container_name: torchserve
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    volumes:
+      - ../model_store:/home/model-server/model-store
+      - ../model_store/torchserve_config/config.properties:/home/model-server/config.properties
+    working_dir: /home/model-server
+    command: >
+      torchserve --ts-config /home/model-server/config.properties
+                 --model-store /home/model-server/model-store
+                 --models simple_model=simple_model.mar
+                 --foreground
