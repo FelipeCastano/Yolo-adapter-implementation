@@ -1,0 +1,38 @@
+{
+    "dataset": "dataset.yaml",
+    "model": "yolov8m",
+    "map50": 0.907,
+    "map50_95": 0.6389,
+    "precision": 0.841,
+    "recall": 0.9089,
+    "f1": 0.8737,
+    "accuracy": 0.7757,
+    "mean_iou": 0.7757,
+    "count_mae": 5.6528,
+    "per_class": {
+        "RBC": {
+            "ap50": 0.8659,
+            "ap50_95": 0.6313,
+            "precision": 0.7543,
+            "recall": 0.8571,
+            "f1": 0.8025,
+            "accuracy": 0.6701
+        },
+        "WBC": {
+            "ap50": 0.9775,
+            "ap50_95": 0.7975,
+            "precision": 0.9315,
+            "recall": 1.0,
+            "f1": 0.9646,
+            "accuracy": 0.9315
+        },
+        "Pl": {
+            "ap50": 0.8776,
+            "ap50_95": 0.4879,
+            "precision": 0.8373,
+            "recall": 0.8696,
+            "f1": 0.8531,
+            "accuracy": 0.7438
+        }
+    }
+}

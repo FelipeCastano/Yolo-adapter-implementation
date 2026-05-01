@@ -1,0 +1,38 @@
+{
+    "dataset": "aug_data_clahe.yaml",
+    "model": "yolov8m",
+    "map50": 0.9041,
+    "map50_95": 0.6334,
+    "precision": 0.8333,
+    "recall": 0.8969,
+    "f1": 0.8639,
+    "accuracy": 0.7605,
+    "mean_iou": 0.7605,
+    "count_mae": 4.1389,
+    "per_class": {
+        "RBC": {
+            "ap50": 0.8645,
+            "ap50_95": 0.6237,
+            "precision": 0.7694,
+            "recall": 0.7776,
+            "f1": 0.7735,
+            "accuracy": 0.6307
+        },
+        "WBC": {
+            "ap50": 0.99,
+            "ap50_95": 0.8205,
+            "precision": 0.9436,
+            "recall": 1.0,
+            "f1": 0.971,
+            "accuracy": 0.9436
+        },
+        "Pl": {
+            "ap50": 0.8579,
+            "ap50_95": 0.4559,
+            "precision": 0.7869,
+            "recall": 0.913,
+            "f1": 0.8453,
+            "accuracy": 0.732
+        }
+    }
+}

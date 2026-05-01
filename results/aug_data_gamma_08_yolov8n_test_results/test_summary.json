@@ -1,0 +1,38 @@
+{
+    "dataset": "aug_data_gamma_08.yaml",
+    "model": "yolov8n",
+    "map50": 0.9133,
+    "map50_95": 0.636,
+    "precision": 0.8366,
+    "recall": 0.93,
+    "f1": 0.8809,
+    "accuracy": 0.7871,
+    "mean_iou": 0.7871,
+    "count_mae": 7.9444,
+    "per_class": {
+        "RBC": {
+            "ap50": 0.8763,
+            "ap50_95": 0.6305,
+            "precision": 0.735,
+            "recall": 0.8733,
+            "f1": 0.7982,
+            "accuracy": 0.6642
+        },
+        "WBC": {
+            "ap50": 0.9725,
+            "ap50_95": 0.7954,
+            "precision": 0.9454,
+            "recall": 1.0,
+            "f1": 0.9719,
+            "accuracy": 0.9454
+        },
+        "Pl": {
+            "ap50": 0.891,
+            "ap50_95": 0.4821,
+            "precision": 0.8295,
+            "recall": 0.9168,
+            "f1": 0.871,
+            "accuracy": 0.7715
+        }
+    }
+}

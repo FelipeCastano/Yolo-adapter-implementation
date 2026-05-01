@@ -1,0 +1,38 @@
+{
+    "dataset": "aug_data_stain_norm.yaml",
+    "model": "yolov8s",
+    "map50": 0.9122,
+    "map50_95": 0.6376,
+    "precision": 0.8077,
+    "recall": 0.9431,
+    "f1": 0.8702,
+    "accuracy": 0.7702,
+    "mean_iou": 0.7702,
+    "count_mae": 6.8194,
+    "per_class": {
+        "RBC": {
+            "ap50": 0.8772,
+            "ap50_95": 0.6295,
+            "precision": 0.7049,
+            "recall": 0.8873,
+            "f1": 0.7857,
+            "accuracy": 0.647
+        },
+        "WBC": {
+            "ap50": 0.9776,
+            "ap50_95": 0.7926,
+            "precision": 0.9361,
+            "recall": 1.0,
+            "f1": 0.967,
+            "accuracy": 0.9361
+        },
+        "Pl": {
+            "ap50": 0.8817,
+            "ap50_95": 0.4907,
+            "precision": 0.7822,
+            "recall": 0.942,
+            "f1": 0.8547,
+            "accuracy": 0.7463
+        }
+    }
+}

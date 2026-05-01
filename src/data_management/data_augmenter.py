@@ -130,23 +130,45 @@ class DataAugmenter:
 
     def _setup_output_dirs(self):
         for split in ("train", "val", "test"):
-            for sub in ("img", "ann"):
+            for sub in ("images", "labels"):
                 os.makedirs(os.path.join(self.output_root, split, sub), exist_ok=True)
 
     def _build_transform(self):
         self.transform = A.Compose(
             [
+                # --- Geometric: orientation invariance ---
                 A.RandomRotate90(p=0.5),
                 A.HorizontalFlip(p=0.5),
                 A.VerticalFlip(p=0.5),
-                A.GaussNoise(std_dev=(2.0, 4.5), p=0.3),
-                A.Sharpen(alpha=(0.1, 0.3), lightness=(0.5, 1.0), p=0.2),
-                A.ElasticTransform(
-                    alpha=0.5,
-                    sigma=120,
+
+                # --- Illumination & color: simulate staining variability ---
+                # Microscopy images vary in brightness and contrast depending
+                # on the staining batch and microscope calibration.
+                A.RandomBrightnessContrast(
+                    brightness_limit=0.15,
+                    contrast_limit=0.15,
+                    p=0.5,
+                ),
+                # Hue/saturation shifts simulate different Giemsa stain
+                # concentrations and slide preparation conditions.
+                A.HueSaturationValue(
+                    hue_shift_limit=8,
+                    sat_shift_limit=20,
+                    val_shift_limit=15,
+                    p=0.4,
+                ),
+
+                # --- Blur: simulate focus variation across the slide ---
+                A.GaussianBlur(
+                    blur_limit=(3, 5),
                     p=0.2,
-                    border_mode=cv2.BORDER_CONSTANT,
-                    fill=255,
+                ),
+
+                # --- Sharpness: simulate over-sharpened microscope output ---
+                A.Sharpen(
+                    alpha=(0.1, 0.25),
+                    lightness=(0.8, 1.0),
+                    p=0.2,
                 ),
             ],
             bbox_params=A.BboxParams(
@@ -171,11 +193,17 @@ class DataAugmenter:
         img_dir = os.path.join(self.input_root, split, "img")
         ann_dir = os.path.join(self.input_root, split, "ann")
 
+        print(f"[DataAugmenter] img_dir: {img_dir} -> exists={os.path.isdir(img_dir)}")
+        print(f"[DataAugmenter] ann_dir: {ann_dir} -> exists={os.path.isdir(ann_dir)}")
+
         if not os.path.isdir(img_dir) or not os.path.isdir(ann_dir):
             return []
 
+        all_files = os.listdir(img_dir)
+        print(f"[DataAugmenter] Files in img_dir ({len(all_files)} total): {all_files[:5]}")
+
         pairs = []
-        for fname in sorted(os.listdir(img_dir)):
+        for fname in sorted(all_files):
             if not fname.lower().endswith((".jpg", ".jpeg", ".png")):
                 continue
             img_path = os.path.join(img_dir, fname)
@@ -273,8 +301,8 @@ class DataAugmenter:
         :param iterations: Number of augmented copies per image.
         :type iterations: int
         """
-        out_img_dir = os.path.join(self.output_root, split, "img")
-        out_ann_dir = os.path.join(self.output_root, split, "ann")
+        out_img_dir = os.path.join(self.output_root, split, "images")
+        out_ann_dir = os.path.join(self.output_root, split, "labels")
 
         for pair in pairs:
             image = cv2.imread(pair["image"])
@@ -312,8 +340,8 @@ class DataAugmenter:
         :param split: Dataset split name.
         :type split: str
         """
-        out_img_dir = os.path.join(self.output_root, split, "img")
-        out_ann_dir = os.path.join(self.output_root, split, "ann")
+        out_img_dir = os.path.join(self.output_root, split, "images")
+        out_ann_dir = os.path.join(self.output_root, split, "labels")
 
         for pair in pairs:
             image = cv2.imread(pair["image"])

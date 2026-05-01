@@ -4,6 +4,6 @@ names:
   2: Pl
 nc: 3
 path: /app/data/aug_data_morph_dilate
-test: test/img
-train: train/img
-val: val/img
+test: test/images
+train: train/images
+val: val/images

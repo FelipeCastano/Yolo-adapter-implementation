@@ -1,8 +1,8 @@
 path: /app/data/aug_data/
 
-train: train
-val:   val
-test:  test
+train: train/images
+val:   val/images
+test:  test/images
 
 nc: 3
 

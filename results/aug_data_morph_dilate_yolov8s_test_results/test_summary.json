@@ -1,0 +1,38 @@
+{
+    "dataset": "aug_data_morph_dilate.yaml",
+    "model": "yolov8s",
+    "map50": 0.9203,
+    "map50_95": 0.6531,
+    "precision": 0.84,
+    "recall": 0.9084,
+    "f1": 0.8728,
+    "accuracy": 0.7744,
+    "mean_iou": 0.7744,
+    "count_mae": 5.9167,
+    "per_class": {
+        "RBC": {
+            "ap50": 0.8701,
+            "ap50_95": 0.6384,
+            "precision": 0.7474,
+            "recall": 0.841,
+            "f1": 0.7915,
+            "accuracy": 0.6549
+        },
+        "WBC": {
+            "ap50": 0.9808,
+            "ap50_95": 0.8128,
+            "precision": 0.9528,
+            "recall": 1.0,
+            "f1": 0.9758,
+            "accuracy": 0.9528
+        },
+        "Pl": {
+            "ap50": 0.91,
+            "ap50_95": 0.5082,
+            "precision": 0.8198,
+            "recall": 0.8841,
+            "f1": 0.8507,
+            "accuracy": 0.7402
+        }
+    }
+}

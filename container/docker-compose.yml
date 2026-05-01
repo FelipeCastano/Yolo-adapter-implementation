@@ -32,7 +32,8 @@ services:
       - ../model_storage:/app/model_storage
     working_dir: /app
     command: >
-      sh -c "python /app/src/data_management/preprocessed_dataset.py"
+      sh -c "python /app/src/data_management/data_augmenter.py &&
+             python /app/src/data_management/preprocessed_dataset.py"
     networks:
       - app-network
 

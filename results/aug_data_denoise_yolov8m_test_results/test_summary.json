@@ -1,0 +1,38 @@
+{
+    "dataset": "aug_data_denoise.yaml",
+    "model": "yolov8m",
+    "map50": 0.9162,
+    "map50_95": 0.6408,
+    "precision": 0.8601,
+    "recall": 0.8993,
+    "f1": 0.8792,
+    "accuracy": 0.7845,
+    "mean_iou": 0.7845,
+    "count_mae": 6.4861,
+    "per_class": {
+        "RBC": {
+            "ap50": 0.8621,
+            "ap50_95": 0.6226,
+            "precision": 0.7949,
+            "recall": 0.7993,
+            "f1": 0.7971,
+            "accuracy": 0.6627
+        },
+        "WBC": {
+            "ap50": 0.9697,
+            "ap50_95": 0.8059,
+            "precision": 0.9387,
+            "recall": 1.0,
+            "f1": 0.9684,
+            "accuracy": 0.9387
+        },
+        "Pl": {
+            "ap50": 0.917,
+            "ap50_95": 0.4938,
+            "precision": 0.8466,
+            "recall": 0.8986,
+            "f1": 0.8718,
+            "accuracy": 0.7727
+        }
+    }
+}

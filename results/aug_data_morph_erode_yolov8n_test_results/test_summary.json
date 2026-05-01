@@ -1,0 +1,38 @@
+{
+    "dataset": "aug_data_morph_erode.yaml",
+    "model": "yolov8n",
+    "map50": 0.912,
+    "map50_95": 0.644,
+    "precision": 0.844,
+    "recall": 0.8874,
+    "f1": 0.8651,
+    "accuracy": 0.7623,
+    "mean_iou": 0.7623,
+    "count_mae": 6.25,
+    "per_class": {
+        "RBC": {
+            "ap50": 0.873,
+            "ap50_95": 0.6333,
+            "precision": 0.7833,
+            "recall": 0.8224,
+            "f1": 0.8023,
+            "accuracy": 0.6699
+        },
+        "WBC": {
+            "ap50": 0.9875,
+            "ap50_95": 0.8086,
+            "precision": 0.9432,
+            "recall": 1.0,
+            "f1": 0.9708,
+            "accuracy": 0.9432
+        },
+        "Pl": {
+            "ap50": 0.8754,
+            "ap50_95": 0.49,
+            "precision": 0.8054,
+            "recall": 0.8398,
+            "f1": 0.8222,
+            "accuracy": 0.6981
+        }
+    }
+}

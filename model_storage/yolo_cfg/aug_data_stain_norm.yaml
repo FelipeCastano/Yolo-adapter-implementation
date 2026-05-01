@@ -1,0 +1,9 @@
+names:
+  0: RBC
+  1: WBC
+  2: Pl
+nc: 3
+path: /app/data/aug_data_stain_norm
+test: test/images
+train: train/images
+val: val/images
