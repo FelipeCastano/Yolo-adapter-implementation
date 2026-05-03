@@ -30,7 +30,7 @@ class YOLOAdapterHandler(BaseHandler):
             "detections": [
                 {
                     "class_id":   2,
-                    "class_name": "Resistor",
+                    "class_name": "RBC",
                     "confidence": 0.91,
                     "bbox": {"x1": 120, "y1": 45, "x2": 210, "y2": 98}
                 }
@@ -38,7 +38,7 @@ class YOLOAdapterHandler(BaseHandler):
         }
     """
 
-    CLASS_NAMES        = ["Capacitor", "Inductor", "Resistor", "DC_VS", "AC_VS", "Connection_Node", "Gnd"]
+    CLASS_NAMES        = ["RBC", "WBC", "Pl"]
     CONF_THRESHOLD     = 0.25
     IMGSZ              = 640
     BINARIZE_THRESHOLD = 127
@@ -50,7 +50,7 @@ class YOLOAdapterHandler(BaseHandler):
         """
         self.device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model_dir    = context.system_properties.get("model_dir")
-        pt_path      = os.path.join(model_dir, "yolov8m.pt")
+        pt_path      = os.path.join(model_dir, "yolov8s.pt")
         weights_path = os.path.join(model_dir, "adapter_weights.pt")
 
         print(f"[YOLOAdapterHandler] Loading model from {weights_path}")
@@ -82,10 +82,10 @@ class YOLOAdapterHandler(BaseHandler):
 
         img           = Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGB")
         img_np        = np.array(img)
-        gray          = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-        _, binary     = cv2.threshold(gray, self.BINARIZE_THRESHOLD, 255, cv2.THRESH_BINARY)
-        img_binary    = cv2.cvtColor(binary, cv2.COLOR_GRAY2RGB)
-        return Image.fromarray(img_binary)
+        kernel_size = 3 
+        kernel = np.ones((kernel_size, kernel_size), np.uint8)
+        img_dilated = cv2.dilate(img_np, kernel, iterations=1)
+        return Image.fromarray(img_dilated)
 
     def inference(self, img: Image.Image):
         """Run YOLO detection on the preprocessed image.

@@ -90,13 +90,13 @@ services:
       - "8080:8080"
       - "8081:8081"
     volumes:
-      - ../model_storage:/home/model-server/model-store
+      - ../model_storage:/home/model-server/model-storage
       - ../model_storage/torchserve_config/config.properties:/home/model-server/config.properties
     working_dir: /home/model-server
     command: >
       torchserve --ts-config /home/model-server/config.properties
-                 --model-store /home/model-server/model-store
-                 --models electronic_symbol_detector=electronic_symbol_detector.mar
+                 --model-store /home/model-server/model-storage
+                 --models blood_cell_detection=blood_cell_detection.mar
                  --foreground
     networks:
       - app-network

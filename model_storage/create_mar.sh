@@ -1,23 +1,19 @@
 #!/bin/bash
-
-# Moverse a la raíz del proyecto (asumiendo que el script está en model_store/)
 cd "$(dirname "$0")/.."
+echo "Creating .mar from project root: $(pwd)"
 
-echo "Creando archivo .mar desde la raíz del proyecto: $(pwd)"
+mkdir -p model_storage
 
-# Crear carpeta model_store si no existe
-mkdir -p model_store
-
-# Ejecutar torch-model-archiver con rutas relativas a la raíz del proyecto
 torch-model-archiver \
-  --model-name simple_model \
-  --version 1.0 \
-  --serialized-file /app/model_store/simple_model.pt \
-  --handler /app/model/handler.py \
-  --model-file /app/model/model.py \
-  --extra-files "/app/model_store/scaler_x.pkl,/app/model_store/scaler_y.pkl" \
-  --export-path /app/model_store \
+  --model-name  blood_cell_detection \
+  --version     1.0 \
+  --handler     /app/model/handler.py \
+  --extra-files "/app/model/adapter_manager.py,\
+/app/model/YOLO_adapter.py,\
+/app/model/custom_trainer.py,\
+/app/model_storage/yolo_cfg/yolov8s.pt,\
+/app/model_storage/adapter_weights.pt" \
+  --export-path /app/model_storage \
   --force
-
-
-echo ".mar creado en model_store/"
+  
+echo ".mar created in model_storage/"

@@ -10,4 +10,4 @@ RUN pip install -r /tmp/requirements.txt
 
 WORKDIR /app
 
-CMD ["/app/model_store/create_mar.sh"]
+CMD ["/app/model_storage/create_mar.sh"]
