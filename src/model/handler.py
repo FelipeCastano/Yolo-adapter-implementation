@@ -39,7 +39,7 @@ class YOLOAdapterHandler(BaseHandler):
     """
 
     CLASS_NAMES        = ["RBC", "WBC", "Pl"]
-    CONF_THRESHOLD     = 0.25
+    CONF_THRESHOLD     = 0.45
     IMGSZ              = 640
     BINARIZE_THRESHOLD = 127
 

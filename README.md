@@ -137,7 +137,7 @@ The frontend includes three tabs:
 
 | Tab | Description |
 |---|---|
-| **Demo** | Upload an image to detect and classify electronic components |
+| **Demo** | Upload an image to detect and classify Blood Cell Detection |
 | **Augmentation Example** | Shows how data augmentation works on uploaded images |
 | **Documentation** | Sphinx-generated documentation explaining the model and augmentation process |
 
