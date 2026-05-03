@@ -1,0 +1,519 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>data_augmenter &mdash; Electronic Symbol Detector 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Electronic Symbol Detector
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../model.html">Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../data_management.html">Data Management</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Electronic Symbol Detector</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Module code</a></li>
+      <li class="breadcrumb-item active">data_augmenter</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for data_augmenter</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">cv2</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">base64</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">albumentations</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">A</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Dict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.model_selection</span><span class="w"> </span><span class="kn">import</span> <span class="n">train_test_split</span>
+
+
+<div class="viewcode-block" id="DataAugmenter">
+<a class="viewcode-back" href="../data_management.html#data_augmenter.DataAugmenter">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DataAugmenter</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Performs data augmentation on blood cell images (or similar datasets).</span>
+
+<span class="sd">    Expects a pre-split dataset with the following structure::</span>
+
+<span class="sd">        root/</span>
+<span class="sd">          train/</span>
+<span class="sd">            img/   ← JPEG images</span>
+<span class="sd">            ann/   ← JSON annotations (e.g. BloodImage_00001.jpeg.json)</span>
+<span class="sd">          val/</span>
+<span class="sd">            img/</span>
+<span class="sd">            ann/</span>
+<span class="sd">          test/</span>
+<span class="sd">            img/</span>
+<span class="sd">            ann/</span>
+
+<span class="sd">    JSON annotations follow the Supervisely-style rectangle format with</span>
+<span class="sd">    absolute pixel coordinates. They are converted to YOLO format on the fly.</span>
+
+<span class="sd">    Output is written to ``output_root/`` with the same train/val/test</span>
+<span class="sd">    structure, using ``img/`` and ``ann/`` subfolders. Annotations are saved</span>
+<span class="sd">    as YOLO ``.txt`` files.</span>
+
+<span class="sd">    Only the **train** split is augmented. Val and test are converted and</span>
+<span class="sd">    copied as-is.</span>
+
+<span class="sd">    **Available operations in pipeline:**</span>
+
+<span class="sd">    * **Orthogonal transforms:** ``RandomRotate90``, ``HorizontalFlip``,</span>
+<span class="sd">      and ``VerticalFlip``.</span>
+<span class="sd">    * **Morphological robustness:** High-sigma elastic transform.</span>
+<span class="sd">    * **Noise &amp; sharpness:** ``GaussNoise`` and ``Sharpen``.</span>
+
+<span class="sd">    :param input_root: Root directory containing train/val/test subfolders.</span>
+<span class="sd">    :type input_root: str</span>
+<span class="sd">    :param output_root: Root output directory. Subfolders are created inside it.</span>
+<span class="sd">    :type output_root: str</span>
+<span class="sd">    :param class_map: Mapping from classTitle strings to integer YOLO class IDs.</span>
+<span class="sd">        Example: ``{&quot;RBC&quot;: 0, &quot;WBC&quot;: 1, &quot;Platelets&quot;: 2}``.</span>
+<span class="sd">        If ``None``, class IDs are assigned alphabetically on first encounter.</span>
+<span class="sd">    :type class_map: Dict[str, int] | None</span>
+<span class="sd">    :param seed: Random seed for reproducibility.</span>
+<span class="sd">    :type seed: int</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">input_root</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">output_root</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">class_map</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">seed</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">42</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_root</span> <span class="o">=</span> <span class="n">input_root</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">output_root</span> <span class="o">=</span> <span class="n">output_root</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">seed</span> <span class="o">=</span> <span class="n">seed</span>
+
+        <span class="c1"># Class mapping: built dynamically if not provided</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">class_map</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">class_map</span> <span class="k">if</span> <span class="n">class_map</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_next_class_id</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">class_map</span><span class="o">.</span><span class="n">values</span><span class="p">(),</span> <span class="n">default</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_setup_output_dirs</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_build_transform</span><span class="p">()</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Public API</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="DataAugmenter.run">
+<a class="viewcode-back" href="../data_management.html#data_augmenter.DataAugmenter.run">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">iterations</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">10</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Run the full pipeline.</span>
+
+<span class="sd">        Augments the train split and converts + copies val/test.</span>
+
+<span class="sd">        :param iterations: Number of augmented versions to generate per</span>
+<span class="sd">            training image.</span>
+<span class="sd">        :type iterations: int</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">split</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;train&quot;</span><span class="p">,</span> <span class="s2">&quot;val&quot;</span><span class="p">,</span> <span class="s2">&quot;test&quot;</span><span class="p">):</span>
+            <span class="n">pairs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_pairs</span><span class="p">(</span><span class="n">split</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">pairs</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[DataAugmenter] No pairs found for split &#39;</span><span class="si">{</span><span class="n">split</span><span class="si">}</span><span class="s2">&#39;, skipping.&quot;</span><span class="p">)</span>
+                <span class="k">continue</span>
+
+            <span class="k">if</span> <span class="n">split</span> <span class="o">==</span> <span class="s2">&quot;train&quot;</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[DataAugmenter] Augmenting </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">pairs</span><span class="p">)</span><span class="si">}</span><span class="s2"> train images × </span><span class="si">{</span><span class="n">iterations</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_augment_split</span><span class="p">(</span><span class="n">pairs</span><span class="p">,</span> <span class="n">split</span><span class="p">,</span> <span class="n">iterations</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[DataAugmenter] Copying </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">pairs</span><span class="p">)</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">split</span><span class="si">}</span><span class="s2"> images (no augmentation)&quot;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_convert_and_copy_split</span><span class="p">(</span><span class="n">pairs</span><span class="p">,</span> <span class="n">split</span><span class="p">)</span>
+
+        <span class="c1"># Save the final class map so downstream training knows the IDs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_save_class_map</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[DataAugmenter] Done. Output: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">output_root</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="DataAugmenter.generate_base64_variants">
+<a class="viewcode-back" href="../data_management.html#data_augmenter.DataAugmenter.generate_base64_variants">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">generate_base64_variants</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">b64_image</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">n_variants</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate augmented versions of a Base64-encoded image (visual demo).</span>
+
+<span class="sd">        :param b64_image: Source image encoded as a Base64 string.</span>
+<span class="sd">        :type b64_image: str</span>
+<span class="sd">        :param n_variants: Number of augmented variants to produce.</span>
+<span class="sd">        :type n_variants: int</span>
+<span class="sd">        :return: List of Base64-encoded augmented images.</span>
+<span class="sd">        :rtype: List[str]</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">img_data</span> <span class="o">=</span> <span class="n">base64</span><span class="o">.</span><span class="n">b64decode</span><span class="p">(</span><span class="n">b64_image</span><span class="p">)</span>
+        <span class="n">nparr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">frombuffer</span><span class="p">(</span><span class="n">img_data</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+        <span class="n">image</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">imdecode</span><span class="p">(</span><span class="n">nparr</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">IMREAD_COLOR</span><span class="p">)</span>
+
+        <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_variants</span><span class="p">):</span>
+            <span class="n">augmented</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">image</span><span class="o">=</span><span class="n">image</span><span class="p">,</span> <span class="n">bboxes</span><span class="o">=</span><span class="p">[],</span> <span class="n">class_labels</span><span class="o">=</span><span class="p">[])</span>
+            <span class="n">_</span><span class="p">,</span> <span class="n">buffer</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">imencode</span><span class="p">(</span><span class="s2">&quot;.jpg&quot;</span><span class="p">,</span> <span class="n">augmented</span><span class="p">[</span><span class="s2">&quot;image&quot;</span><span class="p">])</span>
+            <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">base64</span><span class="o">.</span><span class="n">b64encode</span><span class="p">(</span><span class="n">buffer</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">results</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Internal helpers</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_setup_output_dirs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">split</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;train&quot;</span><span class="p">,</span> <span class="s2">&quot;val&quot;</span><span class="p">,</span> <span class="s2">&quot;test&quot;</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">sub</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;images&quot;</span><span class="p">,</span> <span class="s2">&quot;labels&quot;</span><span class="p">):</span>
+                <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">output_root</span><span class="p">,</span> <span class="n">split</span><span class="p">,</span> <span class="n">sub</span><span class="p">),</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">transform</span> <span class="o">=</span> <span class="n">A</span><span class="o">.</span><span class="n">Compose</span><span class="p">(</span>
+            <span class="p">[</span>
+                <span class="c1"># --- Geometric: orientation invariance ---</span>
+                <span class="n">A</span><span class="o">.</span><span class="n">RandomRotate90</span><span class="p">(</span><span class="n">p</span><span class="o">=</span><span class="mf">0.5</span><span class="p">),</span>
+                <span class="n">A</span><span class="o">.</span><span class="n">HorizontalFlip</span><span class="p">(</span><span class="n">p</span><span class="o">=</span><span class="mf">0.5</span><span class="p">),</span>
+                <span class="n">A</span><span class="o">.</span><span class="n">VerticalFlip</span><span class="p">(</span><span class="n">p</span><span class="o">=</span><span class="mf">0.5</span><span class="p">),</span>
+
+                <span class="c1"># --- Illumination &amp; color: simulate staining variability ---</span>
+                <span class="c1"># Microscopy images vary in brightness and contrast depending</span>
+                <span class="c1"># on the staining batch and microscope calibration.</span>
+                <span class="n">A</span><span class="o">.</span><span class="n">RandomBrightnessContrast</span><span class="p">(</span>
+                    <span class="n">brightness_limit</span><span class="o">=</span><span class="mf">0.15</span><span class="p">,</span>
+                    <span class="n">contrast_limit</span><span class="o">=</span><span class="mf">0.15</span><span class="p">,</span>
+                    <span class="n">p</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="c1"># Hue/saturation shifts simulate different Giemsa stain</span>
+                <span class="c1"># concentrations and slide preparation conditions.</span>
+                <span class="n">A</span><span class="o">.</span><span class="n">HueSaturationValue</span><span class="p">(</span>
+                    <span class="n">hue_shift_limit</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+                    <span class="n">sat_shift_limit</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+                    <span class="n">val_shift_limit</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span>
+                    <span class="n">p</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span>
+                <span class="p">),</span>
+
+                <span class="c1"># --- Blur: simulate focus variation across the slide ---</span>
+                <span class="n">A</span><span class="o">.</span><span class="n">GaussianBlur</span><span class="p">(</span>
+                    <span class="n">blur_limit</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>
+                    <span class="n">p</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+                <span class="p">),</span>
+
+                <span class="c1"># --- Sharpness: simulate over-sharpened microscope output ---</span>
+                <span class="n">A</span><span class="o">.</span><span class="n">Sharpen</span><span class="p">(</span>
+                    <span class="n">alpha</span><span class="o">=</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">),</span>
+                    <span class="n">lightness</span><span class="o">=</span><span class="p">(</span><span class="mf">0.8</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+                    <span class="n">p</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+                <span class="p">),</span>
+            <span class="p">],</span>
+            <span class="n">bbox_params</span><span class="o">=</span><span class="n">A</span><span class="o">.</span><span class="n">BboxParams</span><span class="p">(</span>
+                <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;yolo&quot;</span><span class="p">,</span>
+                <span class="n">label_fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;class_labels&quot;</span><span class="p">],</span>
+                <span class="n">min_visibility</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># File discovery</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_pairs</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">split</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return image/annotation pairs for a given split.</span>
+
+<span class="sd">        :param split: One of ``&#39;train&#39;``, ``&#39;val&#39;``, ``&#39;test&#39;``.</span>
+<span class="sd">        :type split: str</span>
+<span class="sd">        :return: List of dicts with ``&#39;image&#39;`` and ``&#39;annotation&#39;`` paths.</span>
+<span class="sd">        :rtype: List[Dict]</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">img_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_root</span><span class="p">,</span> <span class="n">split</span><span class="p">,</span> <span class="s2">&quot;img&quot;</span><span class="p">)</span>
+        <span class="n">ann_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_root</span><span class="p">,</span> <span class="n">split</span><span class="p">,</span> <span class="s2">&quot;ann&quot;</span><span class="p">)</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[DataAugmenter] img_dir: </span><span class="si">{</span><span class="n">img_dir</span><span class="si">}</span><span class="s2"> -&gt; exists=</span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">img_dir</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[DataAugmenter] ann_dir: </span><span class="si">{</span><span class="n">ann_dir</span><span class="si">}</span><span class="s2"> -&gt; exists=</span><span class="si">{</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">ann_dir</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">img_dir</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">ann_dir</span><span class="p">):</span>
+            <span class="k">return</span> <span class="p">[]</span>
+
+        <span class="n">all_files</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">img_dir</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[DataAugmenter] Files in img_dir (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">all_files</span><span class="p">)</span><span class="si">}</span><span class="s2"> total): </span><span class="si">{</span><span class="n">all_files</span><span class="p">[:</span><span class="mi">5</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">pairs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">fname</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">all_files</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">fname</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">endswith</span><span class="p">((</span><span class="s2">&quot;.jpg&quot;</span><span class="p">,</span> <span class="s2">&quot;.jpeg&quot;</span><span class="p">,</span> <span class="s2">&quot;.png&quot;</span><span class="p">)):</span>
+                <span class="k">continue</span>
+            <span class="n">img_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">img_dir</span><span class="p">,</span> <span class="n">fname</span><span class="p">)</span>
+            <span class="c1"># Annotation filename = image filename + &quot;.json&quot;</span>
+            <span class="n">ann_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ann_dir</span><span class="p">,</span> <span class="n">fname</span> <span class="o">+</span> <span class="s2">&quot;.json&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">ann_path</span><span class="p">):</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[DataAugmenter] Warning: no annotation for </span><span class="si">{</span><span class="n">fname</span><span class="si">}</span><span class="s2">, skipping.&quot;</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="n">pairs</span><span class="o">.</span><span class="n">append</span><span class="p">({</span><span class="s2">&quot;image&quot;</span><span class="p">:</span> <span class="n">img_path</span><span class="p">,</span> <span class="s2">&quot;annotation&quot;</span><span class="p">:</span> <span class="n">ann_path</span><span class="p">})</span>
+        <span class="k">return</span> <span class="n">pairs</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># JSON → YOLO conversion</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_class_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">class_title</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return (and register if new) the YOLO integer ID for a class title.</span>
+
+<span class="sd">        :param class_title: Class name string from the JSON annotation.</span>
+<span class="sd">        :type class_title: str</span>
+<span class="sd">        :return: Integer class ID.</span>
+<span class="sd">        :rtype: int</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">class_title</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">class_map</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">class_map</span><span class="p">[</span><span class="n">class_title</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_next_class_id</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_next_class_id</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">class_map</span><span class="p">[</span><span class="n">class_title</span><span class="p">]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_json_to_yolo</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">ann_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">img_w</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">img_h</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]],</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Parse a Supervisely-style JSON annotation and return YOLO bboxes.</span>
+
+<span class="sd">        Coordinates in the JSON are absolute pixel values.</span>
+<span class="sd">        YOLO format: ``[x_center, y_center, width, height]`` normalised to [0, 1].</span>
+
+<span class="sd">        :param ann_path: Path to the ``.json`` annotation file.</span>
+<span class="sd">        :type ann_path: str</span>
+<span class="sd">        :param img_w: Image width in pixels.</span>
+<span class="sd">        :type img_w: int</span>
+<span class="sd">        :param img_h: Image height in pixels.</span>
+<span class="sd">        :type img_h: int</span>
+<span class="sd">        :return: Tuple of ``(bounding_boxes, class_labels)``.</span>
+<span class="sd">        :rtype: Tuple[List[List[float]], List[int]]</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">ann_path</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+        <span class="n">bboxes</span><span class="p">,</span> <span class="n">labels</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;objects&quot;</span><span class="p">,</span> <span class="p">[]):</span>
+            <span class="k">if</span> <span class="n">obj</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;geometryType&quot;</span><span class="p">)</span> <span class="o">!=</span> <span class="s2">&quot;rectangle&quot;</span><span class="p">:</span>
+                <span class="k">continue</span>  <span class="c1"># skip non-rectangle geometries</span>
+
+            <span class="n">exterior</span> <span class="o">=</span> <span class="n">obj</span><span class="p">[</span><span class="s2">&quot;points&quot;</span><span class="p">][</span><span class="s2">&quot;exterior&quot;</span><span class="p">]</span>
+            <span class="c1"># exterior = [[x1, y1], [x2, y2]]</span>
+            <span class="n">x1</span><span class="p">,</span> <span class="n">y1</span> <span class="o">=</span> <span class="n">exterior</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">x2</span><span class="p">,</span> <span class="n">y2</span> <span class="o">=</span> <span class="n">exterior</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+            <span class="c1"># Ensure correct ordering (just in case)</span>
+            <span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">x1</span><span class="p">,</span> <span class="n">x2</span><span class="p">),</span> <span class="nb">max</span><span class="p">(</span><span class="n">x1</span><span class="p">,</span> <span class="n">x2</span><span class="p">)</span>
+            <span class="n">y_min</span><span class="p">,</span> <span class="n">y_max</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">y1</span><span class="p">,</span> <span class="n">y2</span><span class="p">),</span> <span class="nb">max</span><span class="p">(</span><span class="n">y1</span><span class="p">,</span> <span class="n">y2</span><span class="p">)</span>
+
+            <span class="c1"># Clamp to image boundaries</span>
+            <span class="n">x_min</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">x_min</span><span class="p">)</span>
+            <span class="n">y_min</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">y_min</span><span class="p">)</span>
+            <span class="n">x_max</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">img_w</span><span class="p">,</span> <span class="n">x_max</span><span class="p">)</span>
+            <span class="n">y_max</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">img_h</span><span class="p">,</span> <span class="n">y_max</span><span class="p">)</span>
+
+            <span class="c1"># Convert to YOLO normalised format</span>
+            <span class="n">x_center</span> <span class="o">=</span> <span class="p">((</span><span class="n">x_min</span> <span class="o">+</span> <span class="n">x_max</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="n">img_w</span>
+            <span class="n">y_center</span> <span class="o">=</span> <span class="p">((</span><span class="n">y_min</span> <span class="o">+</span> <span class="n">y_max</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="n">img_h</span>
+            <span class="n">width</span>    <span class="o">=</span> <span class="p">(</span><span class="n">x_max</span> <span class="o">-</span> <span class="n">x_min</span><span class="p">)</span> <span class="o">/</span> <span class="n">img_w</span>
+            <span class="n">height</span>   <span class="o">=</span> <span class="p">(</span><span class="n">y_max</span> <span class="o">-</span> <span class="n">y_min</span><span class="p">)</span> <span class="o">/</span> <span class="n">img_h</span>
+
+            <span class="k">if</span> <span class="n">width</span> <span class="o">&lt;=</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">height</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">continue</span>
+
+            <span class="n">class_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_class_id</span><span class="p">(</span><span class="n">obj</span><span class="p">[</span><span class="s2">&quot;classTitle&quot;</span><span class="p">])</span>
+            <span class="n">bboxes</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">x_center</span><span class="p">,</span> <span class="n">y_center</span><span class="p">,</span> <span class="n">width</span><span class="p">,</span> <span class="n">height</span><span class="p">])</span>
+            <span class="n">labels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">class_id</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">bboxes</span><span class="p">,</span> <span class="n">labels</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Augmentation</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_augment_split</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pairs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">],</span> <span class="n">split</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">iterations</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Augment images and save results to the output split folder.</span>
+
+<span class="sd">        :param pairs: List of dicts with ``&#39;image&#39;`` and ``&#39;annotation&#39;`` paths.</span>
+<span class="sd">        :type pairs: List[Dict]</span>
+<span class="sd">        :param split: Dataset split name (used to build the output path).</span>
+<span class="sd">        :type split: str</span>
+<span class="sd">        :param iterations: Number of augmented copies per image.</span>
+<span class="sd">        :type iterations: int</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">out_img_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">output_root</span><span class="p">,</span> <span class="n">split</span><span class="p">,</span> <span class="s2">&quot;images&quot;</span><span class="p">)</span>
+        <span class="n">out_ann_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">output_root</span><span class="p">,</span> <span class="n">split</span><span class="p">,</span> <span class="s2">&quot;labels&quot;</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">pair</span> <span class="ow">in</span> <span class="n">pairs</span><span class="p">:</span>
+            <span class="n">image</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="n">pair</span><span class="p">[</span><span class="s2">&quot;image&quot;</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">image</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[DataAugmenter] Could not read image: </span><span class="si">{</span><span class="n">pair</span><span class="p">[</span><span class="s1">&#39;image&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">, skipping.&quot;</span><span class="p">)</span>
+                <span class="k">continue</span>
+
+            <span class="n">img_h</span><span class="p">,</span> <span class="n">img_w</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+            <span class="n">bboxes</span><span class="p">,</span> <span class="n">labels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_json_to_yolo</span><span class="p">(</span><span class="n">pair</span><span class="p">[</span><span class="s2">&quot;annotation&quot;</span><span class="p">],</span> <span class="n">img_w</span><span class="p">,</span> <span class="n">img_h</span><span class="p">)</span>
+
+            <span class="n">base_name</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">pair</span><span class="p">[</span><span class="s2">&quot;image&quot;</span><span class="p">]))[</span><span class="mi">0</span><span class="p">]</span>
+
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">iterations</span><span class="p">):</span>
+                <span class="n">transformed</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span>
+                    <span class="n">image</span><span class="o">=</span><span class="n">image</span><span class="p">,</span>
+                    <span class="n">bboxes</span><span class="o">=</span><span class="n">bboxes</span><span class="p">,</span>
+                    <span class="n">class_labels</span><span class="o">=</span><span class="n">labels</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">suffix</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;aug_</span><span class="si">{</span><span class="n">i</span><span class="si">:</span><span class="s2">03d</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="n">img_out</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_img_dir</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">base_name</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">suffix</span><span class="si">}</span><span class="s2">.jpg&quot;</span><span class="p">)</span>
+                <span class="n">ann_out</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_ann_dir</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">base_name</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">suffix</span><span class="si">}</span><span class="s2">.txt&quot;</span><span class="p">)</span>
+
+                <span class="n">cv2</span><span class="o">.</span><span class="n">imwrite</span><span class="p">(</span><span class="n">img_out</span><span class="p">,</span> <span class="n">transformed</span><span class="p">[</span><span class="s2">&quot;image&quot;</span><span class="p">])</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_write_yolo</span><span class="p">(</span><span class="n">ann_out</span><span class="p">,</span> <span class="n">transformed</span><span class="p">[</span><span class="s2">&quot;class_labels&quot;</span><span class="p">],</span> <span class="n">transformed</span><span class="p">[</span><span class="s2">&quot;bboxes&quot;</span><span class="p">])</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Copy without augmentation (val / test)</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_convert_and_copy_split</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pairs</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Dict</span><span class="p">],</span> <span class="n">split</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert JSON annotations to YOLO and copy images unchanged.</span>
+
+<span class="sd">        :param pairs: List of dicts with ``&#39;image&#39;`` and ``&#39;annotation&#39;`` paths.</span>
+<span class="sd">        :type pairs: List[Dict]</span>
+<span class="sd">        :param split: Dataset split name.</span>
+<span class="sd">        :type split: str</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">out_img_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">output_root</span><span class="p">,</span> <span class="n">split</span><span class="p">,</span> <span class="s2">&quot;images&quot;</span><span class="p">)</span>
+        <span class="n">out_ann_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">output_root</span><span class="p">,</span> <span class="n">split</span><span class="p">,</span> <span class="s2">&quot;labels&quot;</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">pair</span> <span class="ow">in</span> <span class="n">pairs</span><span class="p">:</span>
+            <span class="n">image</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="n">pair</span><span class="p">[</span><span class="s2">&quot;image&quot;</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">image</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[DataAugmenter] Could not read image: </span><span class="si">{</span><span class="n">pair</span><span class="p">[</span><span class="s1">&#39;image&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">, skipping.&quot;</span><span class="p">)</span>
+                <span class="k">continue</span>
+
+            <span class="n">img_h</span><span class="p">,</span> <span class="n">img_w</span> <span class="o">=</span> <span class="n">image</span><span class="o">.</span><span class="n">shape</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+            <span class="n">bboxes</span><span class="p">,</span> <span class="n">labels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_json_to_yolo</span><span class="p">(</span><span class="n">pair</span><span class="p">[</span><span class="s2">&quot;annotation&quot;</span><span class="p">],</span> <span class="n">img_w</span><span class="p">,</span> <span class="n">img_h</span><span class="p">)</span>
+
+            <span class="n">fname</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">pair</span><span class="p">[</span><span class="s2">&quot;image&quot;</span><span class="p">])</span>
+            <span class="n">base_name</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="n">fname</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+            <span class="n">shutil</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">pair</span><span class="p">[</span><span class="s2">&quot;image&quot;</span><span class="p">],</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_img_dir</span><span class="p">,</span> <span class="n">fname</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_write_yolo</span><span class="p">(</span>
+                <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out_ann_dir</span><span class="p">,</span> <span class="n">base_name</span> <span class="o">+</span> <span class="s2">&quot;.txt&quot;</span><span class="p">),</span>
+                <span class="n">labels</span><span class="p">,</span>
+                <span class="n">bboxes</span><span class="p">,</span>
+            <span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Utilities</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_write_yolo</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">labels</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">],</span> <span class="n">bboxes</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">float</span><span class="p">]]):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Write YOLO annotation file.</span>
+
+<span class="sd">        :param path: Output ``.txt`` file path.</span>
+<span class="sd">        :type path: str</span>
+<span class="sd">        :param labels: List of integer class IDs.</span>
+<span class="sd">        :type labels: List[int]</span>
+<span class="sd">        :param bboxes: List of ``[x_center, y_center, width, height]`` in [0, 1].</span>
+<span class="sd">        :type bboxes: List[List[float]]</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">bbox</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="n">bboxes</span><span class="p">):</span>
+                <span class="n">bbox_str</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">x</span><span class="si">:</span><span class="s2">.6f</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">bbox</span><span class="p">)</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">bbox_str</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_save_class_map</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Save the class-ID mapping to ``classes.txt`` in the output root.&quot;&quot;&quot;</span>
+        <span class="n">out_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">output_root</span><span class="p">,</span> <span class="s2">&quot;classes.txt&quot;</span><span class="p">)</span>
+        <span class="c1"># Sort by ID so the file is ordered 0, 1, 2, …</span>
+        <span class="n">sorted_classes</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">class_map</span><span class="o">.</span><span class="n">items</span><span class="p">(),</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">kv</span><span class="p">:</span> <span class="n">kv</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">out_path</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">class_title</span><span class="p">,</span> <span class="n">class_id</span> <span class="ow">in</span> <span class="n">sorted_classes</span><span class="p">:</span>
+                <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">class_id</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">class_title</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[DataAugmenter] Class map saved to </span><span class="si">{</span><span class="n">out_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+
+<span class="c1"># ----------------------------------------------------------------------</span>
+<span class="c1"># Entry point</span>
+<span class="c1"># ----------------------------------------------------------------------</span>
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">augmenter</span> <span class="o">=</span> <span class="n">DataAugmenter</span><span class="p">(</span>
+        <span class="n">input_root</span><span class="o">=</span><span class="s2">&quot;/app/data/dataset&quot;</span><span class="p">,</span>   <span class="c1"># must contain train/, val/, test/</span>
+        <span class="n">output_root</span><span class="o">=</span><span class="s2">&quot;/app/data/aug_data&quot;</span><span class="p">,</span>
+        <span class="c1"># Optional: fix your class IDs explicitly.</span>
+        <span class="c1"># If omitted, IDs are assigned alphabetically on first encounter.</span>
+        <span class="n">class_map</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;RBC&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;WBC&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Platelets&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">},</span>
+        <span class="n">seed</span><span class="o">=</span><span class="mi">42</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">augmenter</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">iterations</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

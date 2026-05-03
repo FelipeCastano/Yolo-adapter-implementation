@@ -1,0 +1,667 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>trainer_manager &mdash; Electronic Symbol Detector 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Electronic Symbol Detector
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../model.html">Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../data_management.html">Data Management</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Electronic Symbol Detector</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Module code</a></li>
+      <li class="breadcrumb-item active">trainer_manager</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for trainer_manager</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">gc</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections</span><span class="w"> </span><span class="kn">import</span> <span class="n">defaultdict</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">cv2</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">mlflow</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">yaml</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">PIL</span><span class="w"> </span><span class="kn">import</span> <span class="n">Image</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">ultralytics.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">SETTINGS</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">adapter_manager</span><span class="w"> </span><span class="kn">import</span> <span class="n">AdapterManager</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">custom_trainer</span><span class="w"> </span><span class="kn">import</span> <span class="n">CustomTrainer</span>
+
+
+<span class="c1"># ── Constants ─────────────────────────────────────────────────────────────────</span>
+
+<span class="n">YOLO_CONFIGS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;v8&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;n&quot;</span><span class="p">:</span> <span class="s2">&quot;yolov8n.pt&quot;</span><span class="p">,</span> <span class="s2">&quot;s&quot;</span><span class="p">:</span> <span class="s2">&quot;yolov8s.pt&quot;</span><span class="p">,</span> <span class="s2">&quot;m&quot;</span><span class="p">:</span> <span class="s2">&quot;yolov8m.pt&quot;</span><span class="p">},</span>
+<span class="p">}</span>
+
+<span class="c1"># All preprocessed dataset variants. Keys are used as MLflow experiment names.</span>
+<span class="c1"># &#39;aug_data&#39; is the augmented-only baseline (no extra preprocessing).</span>
+<span class="n">DATASETS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;aug_data&quot;</span><span class="p">:</span>             <span class="s2">&quot;/app/model_storage/yolo_cfg/dataset.yaml&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;aug_data_clahe&quot;</span><span class="p">:</span>       <span class="s2">&quot;/app/model_storage/yolo_cfg/aug_data_clahe.yaml&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;aug_data_stain_norm&quot;</span><span class="p">:</span>  <span class="s2">&quot;/app/model_storage/yolo_cfg/aug_data_stain_norm.yaml&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;aug_data_gamma_08&quot;</span><span class="p">:</span>    <span class="s2">&quot;/app/model_storage/yolo_cfg/aug_data_gamma_08.yaml&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;aug_data_denoise&quot;</span><span class="p">:</span>     <span class="s2">&quot;/app/model_storage/yolo_cfg/aug_data_denoise.yaml&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;aug_data_morph_erode&quot;</span><span class="p">:</span> <span class="s2">&quot;/app/model_storage/yolo_cfg/aug_data_morph_erode.yaml&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;aug_data_morph_dilate&quot;</span><span class="p">:</span><span class="s2">&quot;/app/model_storage/yolo_cfg/aug_data_morph_dilate.yaml&quot;</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="c1"># Fixed training hyperparameters</span>
+<span class="n">EPOCHS</span>       <span class="o">=</span> <span class="mi">1</span>
+<span class="n">BATCH</span>        <span class="o">=</span> <span class="mi">8</span>
+<span class="n">LR</span>           <span class="o">=</span> <span class="mf">1e-3</span>
+<span class="n">OPTIMIZER</span>    <span class="o">=</span> <span class="s2">&quot;AdamW&quot;</span>
+<span class="n">WEIGHT_DECAY</span> <span class="o">=</span> <span class="mf">5e-4</span>
+<span class="n">WARMUP_EPOCHS</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">PATIENCE</span>     <span class="o">=</span> <span class="mi">30</span>
+
+<span class="c1"># Image size: matches the native acquisition resolution (480 × 640).</span>
+<span class="c1"># Using the shorter side avoids unnecessary upscaling of the input images</span>
+<span class="c1"># while keeping the standard YOLO stride constraints satisfied.</span>
+<span class="n">IMGSZ</span> <span class="o">=</span> <span class="mi">480</span>
+
+
+<span class="c1"># ── TrainerManager ────────────────────────────────────────────────────────────</span>
+
+<div class="viewcode-block" id="TrainerManager">
+<a class="viewcode-back" href="../model.html#trainer_manager.TrainerManager">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TrainerManager</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Orchestrates training and evaluation across datasets and model sizes.</span>
+
+<span class="sd">    For each dataset a single MLflow experiment is created. Within it,</span>
+<span class="sd">    one run per model size logs parameters, metrics and prediction artefacts.</span>
+
+<span class="sd">    Metrics computed during ``_test``:</span>
+
+<span class="sd">    * **mAP50 / mAP50-95** — standard COCO detection metrics (global).</span>
+<span class="sd">    * **Per-class breakdown** — AP50, AP50-95, Precision, Recall, F1,</span>
+<span class="sd">      and Accuracy (TP / (TP + FP + FN)) for every class.</span>
+<span class="sd">    * **Mean IoU** — average IoU of all matched (TP) detections.</span>
+<span class="sd">    * **Cell-count MAE** — Mean Absolute Error between the number of</span>
+<span class="sd">      predicted cells and ground-truth cells per image, computed by</span>
+<span class="sd">      running inference over the test split image-by-image.</span>
+
+<span class="sd">    :param base_pt_dir: Directory containing base YOLO ``.pt`` checkpoints.</span>
+<span class="sd">    :type base_pt_dir: str</span>
+<span class="sd">    :param runs_dir: Root directory for Ultralytics run outputs.</span>
+<span class="sd">    :type runs_dir: str</span>
+<span class="sd">    :param results_dir: Root directory where prediction images are saved.</span>
+<span class="sd">    :type results_dir: str</span>
+<span class="sd">    :param nc: Number of output classes.</span>
+<span class="sd">    :type nc: int</span>
+<span class="sd">    :param mlflow_uri: MLflow tracking URI.</span>
+<span class="sd">    :type mlflow_uri: str</span>
+<span class="sd">    :param test_dir: Path to the test image directory.</span>
+<span class="sd">    :type test_dir: str</span>
+<span class="sd">    :param imgsz: Input image size (shorter side). Default: ``480``.</span>
+<span class="sd">    :type imgsz: int</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">base_pt_dir</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">runs_dir</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">results_dir</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">nc</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">mlflow_uri</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">test_dir</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">imgsz</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">IMGSZ</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_pt_dir</span> <span class="o">=</span> <span class="n">base_pt_dir</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">runs_dir</span>    <span class="o">=</span> <span class="n">runs_dir</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">results_dir</span> <span class="o">=</span> <span class="n">results_dir</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nc</span>          <span class="o">=</span> <span class="n">nc</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mlflow_uri</span>  <span class="o">=</span> <span class="n">mlflow_uri</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">test_dir</span>    <span class="o">=</span> <span class="n">test_dir</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">imgsz</span>       <span class="o">=</span> <span class="n">imgsz</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_setup_mlflow</span><span class="p">()</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Public API</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="TrainerManager.run">
+<a class="viewcode-back" href="../model.html#trainer_manager.TrainerManager.run">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dataset_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">yolo_size</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Train, evaluate and log results for one dataset/model combination.</span>
+
+<span class="sd">        :param data: Path to the dataset YAML file.</span>
+<span class="sd">        :type data: str</span>
+<span class="sd">        :param dataset_name: MLflow experiment name and run tag.</span>
+<span class="sd">        :type dataset_name: str</span>
+<span class="sd">        :param yolo_size: Model size — one of ``&#39;n&#39;``, ``&#39;s&#39;``, ``&#39;m&#39;``.</span>
+<span class="sd">        :type yolo_size: str</span>
+<span class="sd">        :return: Dict with ``&#39;map50&#39;``, ``&#39;map50_95&#39;`` and ``&#39;weights_path&#39;``.</span>
+<span class="sd">        :rtype: dict</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">pt_path</span>  <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_pt_dir</span><span class="p">,</span> <span class="n">YOLO_CONFIGS</span><span class="p">[</span><span class="s2">&quot;v8&quot;</span><span class="p">][</span><span class="n">yolo_size</span><span class="p">])</span>
+        <span class="n">run_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;yolov8</span><span class="si">{</span><span class="n">yolo_size</span><span class="si">}</span><span class="s2">&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_set_experiment</span><span class="p">(</span><span class="n">dataset_name</span><span class="p">)</span>
+
+        <span class="k">with</span> <span class="n">mlflow</span><span class="o">.</span><span class="n">start_run</span><span class="p">(</span><span class="n">run_name</span><span class="o">=</span><span class="n">run_name</span><span class="p">):</span>
+            <span class="n">best_weights</span>  <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_train</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">pt_path</span><span class="p">,</span> <span class="n">run_name</span><span class="p">,</span> <span class="n">dataset_name</span><span class="p">,</span> <span class="n">yolo_size</span><span class="p">)</span>
+            <span class="n">adapted_model</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_load</span><span class="p">(</span><span class="n">pt_path</span><span class="p">,</span> <span class="n">best_weights</span><span class="p">)</span>
+            <span class="n">metrics</span>       <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_test</span><span class="p">(</span><span class="n">adapted_model</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">run_name</span><span class="p">,</span> <span class="n">dataset_name</span><span class="p">)</span>
+            <span class="n">mlflow</span><span class="o">.</span><span class="n">log_artifacts</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">results_dir</span><span class="p">,</span> <span class="n">artifact_path</span><span class="o">=</span><span class="s2">&quot;predictions&quot;</span><span class="p">)</span>
+
+        <span class="k">del</span> <span class="n">adapted_model</span>
+        <span class="n">gc</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span>
+        <span class="c1">#torch.cuda.empty_cache()</span>
+        <span class="c1">#torch.cuda.synchronize()</span>
+        <span class="nb">print</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;[TrainerManager] VRAM liberada. &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;Reservada: </span><span class="si">{</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">memory_reserved</span><span class="p">()</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">1e9</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> GB&quot;</span>
+        <span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;map50&quot;</span><span class="p">:</span>        <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;map50&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;map50_95&quot;</span><span class="p">:</span>     <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;map50_95&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;weights_path&quot;</span><span class="p">:</span> <span class="n">best_weights</span><span class="p">,</span>
+        <span class="p">}</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Training</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_train</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">data</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">pt_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">run_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">dataset_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">yolo_size</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build model, log hyperparameters and run training.</span>
+
+<span class="sd">        :return: Path to the best weights checkpoint.</span>
+<span class="sd">        :rtype: str</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">manager</span>       <span class="o">=</span> <span class="n">AdapterManager</span><span class="p">(</span><span class="n">pt_path</span><span class="p">)</span>
+        <span class="n">adapted_model</span> <span class="o">=</span> <span class="n">manager</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">nc</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">nc</span><span class="p">)</span>
+
+        <span class="n">total</span>     <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">adapted_model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span>
+        <span class="n">trainable</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span>
+            <span class="n">p</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">adapted_model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">()</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">requires_grad</span>
+        <span class="p">)</span>
+
+        <span class="n">mlflow</span><span class="o">.</span><span class="n">log_params</span><span class="p">({</span>
+            <span class="s2">&quot;dataset&quot;</span><span class="p">:</span>        <span class="n">dataset_name</span><span class="p">,</span>
+            <span class="s2">&quot;yolo_size&quot;</span><span class="p">:</span>      <span class="n">yolo_size</span><span class="p">,</span>
+            <span class="s2">&quot;epochs&quot;</span><span class="p">:</span>         <span class="n">EPOCHS</span><span class="p">,</span>
+            <span class="s2">&quot;batch&quot;</span><span class="p">:</span>          <span class="n">BATCH</span><span class="p">,</span>
+            <span class="s2">&quot;lr&quot;</span><span class="p">:</span>             <span class="n">LR</span><span class="p">,</span>
+            <span class="s2">&quot;optimizer&quot;</span><span class="p">:</span>      <span class="n">OPTIMIZER</span><span class="p">,</span>
+            <span class="s2">&quot;weight_decay&quot;</span><span class="p">:</span>   <span class="n">WEIGHT_DECAY</span><span class="p">,</span>
+            <span class="s2">&quot;warmup_epochs&quot;</span><span class="p">:</span>  <span class="n">WARMUP_EPOCHS</span><span class="p">,</span>
+            <span class="s2">&quot;patience&quot;</span><span class="p">:</span>       <span class="n">PATIENCE</span><span class="p">,</span>
+            <span class="s2">&quot;nc&quot;</span><span class="p">:</span>             <span class="bp">self</span><span class="o">.</span><span class="n">nc</span><span class="p">,</span>
+            <span class="s2">&quot;imgsz&quot;</span><span class="p">:</span>          <span class="bp">self</span><span class="o">.</span><span class="n">imgsz</span><span class="p">,</span>
+            <span class="s2">&quot;total_params&quot;</span><span class="p">:</span>   <span class="n">total</span><span class="p">,</span>
+            <span class="s2">&quot;trainable_params&quot;</span><span class="p">:</span> <span class="n">trainable</span><span class="p">,</span>
+            <span class="s2">&quot;trainable_pct&quot;</span><span class="p">:</span>  <span class="nb">round</span><span class="p">(</span><span class="mi">100</span> <span class="o">*</span> <span class="n">trainable</span> <span class="o">/</span> <span class="n">total</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+        <span class="p">})</span>
+        <span class="n">mlflow</span><span class="o">.</span><span class="n">set_tags</span><span class="p">({</span>
+            <span class="s2">&quot;model_base&quot;</span><span class="p">:</span>     <span class="sa">f</span><span class="s2">&quot;yolov8</span><span class="si">{</span><span class="n">yolo_size</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;adapter_type&quot;</span><span class="p">:</span>   <span class="s2">&quot;C2f_Adapter&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;init_strategy&quot;</span><span class="p">:</span>  <span class="s2">&quot;data_driven_xavier&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;dataset&quot;</span><span class="p">:</span>        <span class="n">dataset_name</span><span class="p">,</span>
+        <span class="p">})</span>
+
+        <span class="n">trainer</span> <span class="o">=</span> <span class="n">CustomTrainer</span><span class="p">(</span>
+            <span class="n">adapted_model</span><span class="o">=</span><span class="n">adapted_model</span><span class="p">,</span>
+            <span class="n">overrides</span><span class="o">=</span><span class="p">{</span>
+                <span class="s2">&quot;data&quot;</span><span class="p">:</span>          <span class="n">data</span><span class="p">,</span>
+                <span class="s2">&quot;epochs&quot;</span><span class="p">:</span>        <span class="n">EPOCHS</span><span class="p">,</span>
+                <span class="s2">&quot;imgsz&quot;</span><span class="p">:</span>         <span class="bp">self</span><span class="o">.</span><span class="n">imgsz</span><span class="p">,</span>
+                <span class="s2">&quot;batch&quot;</span><span class="p">:</span>         <span class="n">BATCH</span><span class="p">,</span>
+                <span class="s2">&quot;lr0&quot;</span><span class="p">:</span>           <span class="n">LR</span><span class="p">,</span>
+                <span class="s2">&quot;optimizer&quot;</span><span class="p">:</span>     <span class="n">OPTIMIZER</span><span class="p">,</span>
+                <span class="s2">&quot;weight_decay&quot;</span><span class="p">:</span>  <span class="n">WEIGHT_DECAY</span><span class="p">,</span>
+                <span class="s2">&quot;warmup_epochs&quot;</span><span class="p">:</span> <span class="n">WARMUP_EPOCHS</span><span class="p">,</span>
+                <span class="s2">&quot;model&quot;</span><span class="p">:</span>         <span class="n">pt_path</span><span class="p">,</span>
+                <span class="s2">&quot;name&quot;</span><span class="p">:</span>          <span class="n">run_name</span><span class="p">,</span>
+                <span class="s2">&quot;project&quot;</span><span class="p">:</span>       <span class="bp">self</span><span class="o">.</span><span class="n">runs_dir</span><span class="p">,</span>
+                <span class="s2">&quot;patience&quot;</span><span class="p">:</span>      <span class="n">PATIENCE</span><span class="p">,</span>
+            <span class="p">},</span>
+        <span class="p">)</span>
+        <span class="n">trainer</span><span class="o">.</span><span class="n">callbacks</span><span class="p">[</span><span class="s2">&quot;on_train_end&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">cb</span> <span class="k">for</span> <span class="n">cb</span> <span class="ow">in</span> <span class="n">trainer</span><span class="o">.</span><span class="n">callbacks</span><span class="p">[</span><span class="s2">&quot;on_train_end&quot;</span><span class="p">]</span>
+            <span class="k">if</span> <span class="s2">&quot;mlflow&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">cb</span><span class="p">)</span>
+        <span class="p">]</span>
+        <span class="n">trainer</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
+        <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">trainer</span><span class="o">.</span><span class="n">best</span><span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Loading</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_load</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pt_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">weights_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Rebuild architecture and load trained weights.</span>
+
+<span class="sd">        :param pt_path: Base YOLO checkpoint path.</span>
+<span class="sd">        :param weights_path: Fine-tuned checkpoint path.</span>
+<span class="sd">        :return: Loaded adapted YOLO model.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">manager</span> <span class="o">=</span> <span class="n">AdapterManager</span><span class="p">(</span><span class="n">pt_path</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">manager</span><span class="o">.</span><span class="n">load_trained</span><span class="p">(</span><span class="n">weights_path</span><span class="p">,</span> <span class="n">nc</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">nc</span><span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Evaluation</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_test</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">run_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dataset_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Evaluate on the test split and compute detailed metrics.</span>
+
+<span class="sd">        Metrics computed</span>
+<span class="sd">        ----------------</span>
+<span class="sd">        Global</span>
+<span class="sd">            mAP50, mAP50-95, Precision, Recall, F1, Mean IoU.</span>
+
+<span class="sd">        Per class</span>
+<span class="sd">            AP50, AP50-95, Precision, Recall, F1,</span>
+<span class="sd">            Accuracy = TP / (TP + FP + FN).</span>
+
+<span class="sd">        Cell-count MAE</span>
+<span class="sd">            Mean Absolute Error between the number of predicted detections</span>
+<span class="sd">            and the number of ground-truth boxes per image, across the</span>
+<span class="sd">            entire test split.</span>
+
+<span class="sd">        :param model: Loaded adapted YOLO model.</span>
+<span class="sd">        :param data: Path to the dataset YAML config.</span>
+<span class="sd">        :param run_name: Used to name the output subdirectory.</span>
+<span class="sd">        :return: Dict with all computed metrics.</span>
+<span class="sd">        :rtype: dict</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">[TrainerManager] Evaluating </span><span class="si">{</span><span class="n">run_name</span><span class="si">}</span><span class="s2"> on test split…&quot;</span><span class="p">)</span>
+
+        <span class="n">dataset_info</span>          <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_read_yaml</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">names</span>     <span class="o">=</span> <span class="n">dataset_info</span><span class="p">[</span><span class="s2">&quot;names&quot;</span><span class="p">]</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">nc</span>        <span class="o">=</span> <span class="n">dataset_info</span><span class="p">[</span><span class="s2">&quot;nc&quot;</span><span class="p">]</span>
+        <span class="n">class_names</span><span class="p">:</span> <span class="nb">dict</span>     <span class="o">=</span> <span class="n">dataset_info</span><span class="p">[</span><span class="s2">&quot;names&quot;</span><span class="p">]</span>   <span class="c1"># {0: &quot;RBC&quot;, 1: &quot;WBC&quot;, …}</span>
+
+        <span class="n">test_output_dir</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">results_dir</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">dataset_name</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">run_name</span><span class="si">}</span><span class="s2">_test_results&quot;</span><span class="p">)</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">test_output_dir</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># ── 1. model.val() — detection metrics ────────────────────────</span>
+        <span class="n">results</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">val</span><span class="p">(</span>
+            <span class="n">data</span>     <span class="o">=</span> <span class="n">data</span><span class="p">,</span>
+            <span class="n">split</span>    <span class="o">=</span> <span class="s2">&quot;test&quot;</span><span class="p">,</span>
+            <span class="n">imgsz</span>    <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">imgsz</span><span class="p">,</span>
+            <span class="n">batch</span>    <span class="o">=</span> <span class="n">BATCH</span><span class="p">,</span>
+            <span class="n">project</span>  <span class="o">=</span> <span class="n">test_output_dir</span><span class="p">,</span>
+            <span class="n">name</span>     <span class="o">=</span> <span class="s2">&quot;val_plots&quot;</span><span class="p">,</span>
+            <span class="n">save_json</span><span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+            <span class="n">plots</span>    <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="n">box</span> <span class="o">=</span> <span class="n">results</span><span class="o">.</span><span class="n">box</span>
+
+        <span class="c1"># ── 2. Per-class AP50-95 ───────────────────────────────────────</span>
+        <span class="c1"># box.ap shape can be (nc,) [mean over IoU thresholds already]</span>
+        <span class="c1"># or (nc, n_thresholds) depending on Ultralytics version.</span>
+        <span class="n">raw_ap</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">box</span><span class="o">.</span><span class="n">ap</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">raw_ap</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">ap50_95_per_class</span> <span class="o">=</span> <span class="n">raw_ap</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">ap50_95_per_class</span> <span class="o">=</span> <span class="n">raw_ap</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+
+        <span class="n">ap50_per_class</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">box</span><span class="o">.</span><span class="n">ap50</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+
+        <span class="c1"># box.p and box.r are (nc,) arrays — precision &amp; recall per class</span>
+        <span class="n">precision_per_class</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">box</span><span class="o">.</span><span class="n">p</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+        <span class="n">recall_per_class</span>    <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">box</span><span class="o">.</span><span class="n">r</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+
+        <span class="c1"># ── 3. Per-class F1, Accuracy ─────────────────────────────────</span>
+        <span class="c1"># Ultralytics stores TP counts in box.tp (nc,) and the confusion</span>
+        <span class="c1"># matrix holds FP/FN. We derive them from P and R:</span>
+        <span class="c1">#   P = TP / (TP + FP)  →  FP = TP * (1/P - 1)</span>
+        <span class="c1">#   R = TP / (TP + FN)  →  FN = TP * (1/R - 1)</span>
+        <span class="c1"># When P or R is 0 we set the derived count to 0 safely.</span>
+        <span class="n">per_class_metrics</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">class_names</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="n">p</span>   <span class="o">=</span> <span class="n">precision_per_class</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">precision_per_class</span><span class="p">)</span> <span class="k">else</span> <span class="mf">0.0</span>
+            <span class="n">r</span>   <span class="o">=</span> <span class="n">recall_per_class</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>    <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">recall_per_class</span><span class="p">)</span>    <span class="k">else</span> <span class="mf">0.0</span>
+            <span class="n">ap50</span>    <span class="o">=</span> <span class="n">ap50_per_class</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>    <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">ap50_per_class</span><span class="p">)</span>    <span class="k">else</span> <span class="mf">0.0</span>
+            <span class="n">ap5095</span>  <span class="o">=</span> <span class="n">ap50_95_per_class</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">ap50_95_per_class</span><span class="p">)</span> <span class="k">else</span> <span class="mf">0.0</span>
+
+            <span class="c1"># F1</span>
+            <span class="n">f1</span> <span class="o">=</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">p</span> <span class="o">*</span> <span class="n">r</span> <span class="o">/</span> <span class="p">(</span><span class="n">p</span> <span class="o">+</span> <span class="n">r</span><span class="p">))</span> <span class="k">if</span> <span class="p">(</span><span class="n">p</span> <span class="o">+</span> <span class="n">r</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mf">0.0</span>
+
+            <span class="c1"># Accuracy = TP / (TP + FP + FN)</span>
+            <span class="c1"># Expressed purely from P and R (avoids needing raw TP counts):</span>
+            <span class="c1">#   TP/(TP+FP) = P  and  TP/(TP+FN) = R</span>
+            <span class="c1">#   accuracy = P*R / (P + R - P*R)   [equivalent formulation]</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">p</span> <span class="o">+</span> <span class="n">r</span> <span class="o">-</span> <span class="n">p</span> <span class="o">*</span> <span class="n">r</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">accuracy</span> <span class="o">=</span> <span class="p">(</span><span class="n">p</span> <span class="o">*</span> <span class="n">r</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">p</span> <span class="o">+</span> <span class="n">r</span> <span class="o">-</span> <span class="n">p</span> <span class="o">*</span> <span class="n">r</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">accuracy</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+            <span class="n">per_class_metrics</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+                <span class="s2">&quot;ap50&quot;</span><span class="p">:</span>     <span class="nb">round</span><span class="p">(</span><span class="n">ap50</span><span class="p">,</span>   <span class="mi">4</span><span class="p">),</span>
+                <span class="s2">&quot;ap50_95&quot;</span><span class="p">:</span>  <span class="nb">round</span><span class="p">(</span><span class="n">ap5095</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+                <span class="s2">&quot;precision&quot;</span><span class="p">:</span><span class="nb">round</span><span class="p">(</span><span class="n">p</span><span class="p">,</span>      <span class="mi">4</span><span class="p">),</span>
+                <span class="s2">&quot;recall&quot;</span><span class="p">:</span>   <span class="nb">round</span><span class="p">(</span><span class="n">r</span><span class="p">,</span>      <span class="mi">4</span><span class="p">),</span>
+                <span class="s2">&quot;f1&quot;</span><span class="p">:</span>       <span class="nb">round</span><span class="p">(</span><span class="n">f1</span><span class="p">,</span>     <span class="mi">4</span><span class="p">),</span>
+                <span class="s2">&quot;accuracy&quot;</span><span class="p">:</span> <span class="nb">round</span><span class="p">(</span><span class="n">accuracy</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span>
+            <span class="p">}</span>
+
+        <span class="c1"># ── 4. Global F1 and Accuracy ──────────────────────────────────</span>
+        <span class="n">mp</span>  <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">box</span><span class="o">.</span><span class="n">mp</span><span class="p">)</span>   <span class="c1"># mean precision</span>
+        <span class="n">mr</span>  <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">box</span><span class="o">.</span><span class="n">mr</span><span class="p">)</span>   <span class="c1"># mean recall</span>
+        <span class="n">global_f1</span> <span class="o">=</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">mp</span> <span class="o">*</span> <span class="n">mr</span> <span class="o">/</span> <span class="p">(</span><span class="n">mp</span> <span class="o">+</span> <span class="n">mr</span><span class="p">))</span> <span class="k">if</span> <span class="p">(</span><span class="n">mp</span> <span class="o">+</span> <span class="n">mr</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mf">0.0</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">mp</span> <span class="o">+</span> <span class="n">mr</span> <span class="o">-</span> <span class="n">mp</span> <span class="o">*</span> <span class="n">mr</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">global_accuracy</span> <span class="o">=</span> <span class="p">(</span><span class="n">mp</span> <span class="o">*</span> <span class="n">mr</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">mp</span> <span class="o">+</span> <span class="n">mr</span> <span class="o">-</span> <span class="n">mp</span> <span class="o">*</span> <span class="n">mr</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">global_accuracy</span> <span class="o">=</span> <span class="mf">0.0</span>
+
+        <span class="c1"># ── 5. Mean IoU of matched detections ─────────────────────────</span>
+        <span class="c1"># results.box.mean_results() returns [P, R, mAP50, mAP50-95].</span>
+        <span class="c1"># Ultralytics does not expose per-match IoU directly through the</span>
+        <span class="c1"># public API, so we read it from the confusion matrix&#39;s TP IoU</span>
+        <span class="c1"># tensor when available, falling back to a P/R-based estimate.</span>
+        <span class="n">mean_iou</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_mean_iou</span><span class="p">(</span><span class="n">results</span><span class="p">)</span>
+
+        <span class="c1"># ── 6. Cell-count MAE ──────────────────────────────────────────</span>
+        <span class="n">test_img_dir</span>  <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dataset_info</span><span class="p">[</span><span class="s2">&quot;path&quot;</span><span class="p">],</span> <span class="s2">&quot;test&quot;</span><span class="p">,</span> <span class="s2">&quot;images&quot;</span><span class="p">)</span>
+        <span class="n">test_ann_dir</span>  <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dataset_info</span><span class="p">[</span><span class="s2">&quot;path&quot;</span><span class="p">],</span> <span class="s2">&quot;test&quot;</span><span class="p">,</span> <span class="s2">&quot;labels&quot;</span><span class="p">)</span>
+        <span class="n">count_mae</span>     <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_count_mae</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">test_img_dir</span><span class="p">,</span> <span class="n">test_ann_dir</span><span class="p">)</span>
+
+        <span class="c1"># ── 7. Assemble summary ────────────────────────────────────────</span>
+        <span class="n">metrics</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;dataset&quot;</span><span class="p">:</span>    <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">data</span><span class="p">),</span>
+            <span class="s2">&quot;model&quot;</span><span class="p">:</span>      <span class="n">run_name</span><span class="p">,</span>
+            <span class="c1"># Global</span>
+            <span class="s2">&quot;map50&quot;</span><span class="p">:</span>          <span class="nb">round</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">box</span><span class="o">.</span><span class="n">map50</span><span class="p">),</span> <span class="mi">4</span><span class="p">),</span>
+            <span class="s2">&quot;map50_95&quot;</span><span class="p">:</span>       <span class="nb">round</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">box</span><span class="o">.</span><span class="n">map</span><span class="p">),</span>   <span class="mi">4</span><span class="p">),</span>
+            <span class="s2">&quot;precision&quot;</span><span class="p">:</span>      <span class="nb">round</span><span class="p">(</span><span class="n">mp</span><span class="p">,</span>               <span class="mi">4</span><span class="p">),</span>
+            <span class="s2">&quot;recall&quot;</span><span class="p">:</span>         <span class="nb">round</span><span class="p">(</span><span class="n">mr</span><span class="p">,</span>               <span class="mi">4</span><span class="p">),</span>
+            <span class="s2">&quot;f1&quot;</span><span class="p">:</span>             <span class="nb">round</span><span class="p">(</span><span class="n">global_f1</span><span class="p">,</span>        <span class="mi">4</span><span class="p">),</span>
+            <span class="s2">&quot;accuracy&quot;</span><span class="p">:</span>       <span class="nb">round</span><span class="p">(</span><span class="n">global_accuracy</span><span class="p">,</span>  <span class="mi">4</span><span class="p">),</span>
+            <span class="s2">&quot;mean_iou&quot;</span><span class="p">:</span>       <span class="nb">round</span><span class="p">(</span><span class="n">mean_iou</span><span class="p">,</span>         <span class="mi">4</span><span class="p">),</span>
+            <span class="s2">&quot;count_mae&quot;</span><span class="p">:</span>      <span class="nb">round</span><span class="p">(</span><span class="n">count_mae</span><span class="p">,</span>        <span class="mi">4</span><span class="p">),</span>
+            <span class="c1"># Per class</span>
+            <span class="s2">&quot;per_class&quot;</span><span class="p">:</span>      <span class="n">per_class_metrics</span><span class="p">,</span>
+        <span class="p">}</span>
+
+        <span class="c1"># ── 8. Save JSON ───────────────────────────────────────────────</span>
+        <span class="n">summary_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">test_output_dir</span><span class="p">,</span> <span class="s2">&quot;test_summary.json&quot;</span><span class="p">)</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">summary_path</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">json</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">metrics</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">indent</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+
+        <span class="c1"># ── 9. Log scalar metrics to MLflow ───────────────────────────</span>
+        <span class="n">flat_mlflow</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;test_mAP50&quot;</span><span class="p">:</span>     <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;map50&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;test_mAP50_95&quot;</span><span class="p">:</span>  <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;map50_95&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;test_precision&quot;</span><span class="p">:</span>  <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;precision&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;test_recall&quot;</span><span class="p">:</span>     <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;recall&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;test_f1&quot;</span><span class="p">:</span>         <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;f1&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;test_accuracy&quot;</span><span class="p">:</span>   <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;accuracy&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;test_mean_iou&quot;</span><span class="p">:</span>   <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;mean_iou&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;test_count_mae&quot;</span><span class="p">:</span>  <span class="n">metrics</span><span class="p">[</span><span class="s2">&quot;count_mae&quot;</span><span class="p">],</span>
+        <span class="p">}</span>
+        <span class="k">for</span> <span class="n">class_name</span><span class="p">,</span> <span class="n">cm</span> <span class="ow">in</span> <span class="n">per_class_metrics</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">for</span> <span class="n">metric_name</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">cm</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                <span class="n">flat_mlflow</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;test_</span><span class="si">{</span><span class="n">class_name</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">metric_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+
+        <span class="n">mlflow</span><span class="o">.</span><span class="n">log_metrics</span><span class="p">(</span><span class="n">flat_mlflow</span><span class="p">)</span>
+        <span class="n">mlflow</span><span class="o">.</span><span class="n">log_artifacts</span><span class="p">(</span><span class="n">test_output_dir</span><span class="p">,</span> <span class="n">artifact_path</span><span class="o">=</span><span class="s2">&quot;test_manual_export&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">metrics</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Metric helpers</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compute_mean_iou</span><span class="p">(</span><span class="n">results</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Extract mean IoU of matched detections from validation results.</span>
+
+<span class="sd">        Ultralytics stores per-threshold IoU data internally. We attempt to</span>
+<span class="sd">        read ``results.box.iouv`` (IoU thresholds vector) and the TP mask</span>
+<span class="sd">        ``results.box.tp`` to compute mean IoU over matched detections.</span>
+<span class="sd">        If neither is available we fall back to a P/R harmonic approximation.</span>
+
+<span class="sd">        :param results: Object returned by ``model.val()``.</span>
+<span class="sd">        :return: Mean IoU as a float in [0, 1].</span>
+<span class="sd">        :rtype: float</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Ultralytics &gt;= 8.1 stores tp as (N, n_iou_thresholds) bool tensor</span>
+            <span class="n">tp</span> <span class="o">=</span> <span class="n">results</span><span class="o">.</span><span class="n">box</span><span class="o">.</span><span class="n">tp</span>          <span class="c1"># (N, 10) bool</span>
+            <span class="n">iouv</span> <span class="o">=</span> <span class="n">results</span><span class="o">.</span><span class="n">box</span><span class="o">.</span><span class="n">iouv</span>      <span class="c1"># (10,) tensor: [0.50, 0.55, …, 0.95]</span>
+            <span class="k">if</span> <span class="n">tp</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">iouv</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">tp_np</span>   <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">tp</span><span class="p">,</span>   <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>   <span class="c1"># (N, 10)</span>
+                <span class="n">iouv_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">iouv</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>   <span class="c1"># (10,)</span>
+                <span class="c1"># For each detection, find the highest IoU threshold it matched</span>
+                <span class="n">matched_mask</span> <span class="o">=</span> <span class="n">tp_np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>        <span class="c1"># (N,) — at least one threshold</span>
+                <span class="k">if</span> <span class="n">matched_mask</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="c1"># Weighted sum: each matched detection contributes the mean</span>
+                    <span class="c1"># of the IoU thresholds at which it was a TP</span>
+                    <span class="n">matched_iou</span> <span class="o">=</span> <span class="p">(</span><span class="n">tp_np</span><span class="p">[</span><span class="n">matched_mask</span><span class="p">]</span> <span class="o">*</span> <span class="n">iouv_np</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">/</span> \
+                                   <span class="n">tp_np</span><span class="p">[</span><span class="n">matched_mask</span><span class="p">]</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+                    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">matched_iou</span><span class="o">.</span><span class="n">mean</span><span class="p">())</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+            <span class="k">pass</span>
+
+        <span class="c1"># Fallback: estimate from global P and R</span>
+        <span class="c1"># mean_IoU ≈ (P * R) / (P + R - P * R)  [Jaccard approximation]</span>
+        <span class="n">p</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">results</span><span class="o">.</span><span class="n">box</span><span class="o">.</span><span class="n">mp</span><span class="p">)</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">results</span><span class="o">.</span><span class="n">box</span><span class="o">.</span><span class="n">mr</span><span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">p</span> <span class="o">+</span> <span class="n">r</span> <span class="o">-</span> <span class="n">p</span> <span class="o">*</span> <span class="n">r</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">(</span><span class="n">p</span> <span class="o">*</span> <span class="n">r</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="n">p</span> <span class="o">+</span> <span class="n">r</span> <span class="o">-</span> <span class="n">p</span> <span class="o">*</span> <span class="n">r</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mf">0.0</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_compute_count_mae</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">model</span><span class="p">,</span>
+        <span class="n">img_dir</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">ann_dir</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute Mean Absolute Error of cell counts per image.</span>
+
+<span class="sd">        For every image in ``img_dir`` the model predicts a number of</span>
+<span class="sd">        bounding boxes. The ground-truth count comes from the corresponding</span>
+<span class="sd">        YOLO ``.txt`` label file (one line = one object). The MAE is the</span>
+<span class="sd">        mean of |predicted_count − gt_count| across all images.</span>
+
+<span class="sd">        :param model: Loaded adapted YOLO model.</span>
+<span class="sd">        :param img_dir: Directory containing test images.</span>
+<span class="sd">        :type img_dir: str</span>
+<span class="sd">        :param ann_dir: Directory containing YOLO ``.txt`` label files.</span>
+<span class="sd">        :type ann_dir: str</span>
+<span class="sd">        :return: MAE of cell counts per image.</span>
+<span class="sd">        :rtype: float</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">img_dir</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">ann_dir</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span>
+                <span class="s2">&quot;[TrainerManager] count_mae: img_dir or ann_dir not found, &quot;</span>
+                <span class="s2">&quot;returning 0.&quot;</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="mf">0.0</span>
+
+        <span class="n">abs_errors</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">img_exts</span>   <span class="o">=</span> <span class="p">(</span><span class="s2">&quot;.jpg&quot;</span><span class="p">,</span> <span class="s2">&quot;.jpeg&quot;</span><span class="p">,</span> <span class="s2">&quot;.png&quot;</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">fname</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">img_dir</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">fname</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="n">img_exts</span><span class="p">):</span>
+                <span class="k">continue</span>
+
+            <span class="n">img_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">img_dir</span><span class="p">,</span> <span class="n">fname</span><span class="p">)</span>
+            <span class="n">ann_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ann_dir</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="n">fname</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="s2">&quot;.txt&quot;</span><span class="p">)</span>
+
+            <span class="c1"># Ground-truth count</span>
+            <span class="n">gt_count</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">ann_path</span><span class="p">):</span>
+                <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">ann_path</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                    <span class="n">gt_count</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">f</span> <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">())</span>
+
+            <span class="c1"># Predicted count</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">preds</span>     <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">img_path</span><span class="p">,</span> <span class="n">imgsz</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">imgsz</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+                <span class="n">pred_count</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">preds</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">boxes</span><span class="p">)</span> <span class="k">if</span> <span class="n">preds</span> <span class="ow">and</span> <span class="n">preds</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">boxes</span> <span class="k">else</span> <span class="mi">0</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[TrainerManager] count_mae: prediction failed for </span><span class="si">{</span><span class="n">fname</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">pred_count</span> <span class="o">=</span> <span class="mi">0</span>
+
+            <span class="n">abs_errors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">pred_count</span> <span class="o">-</span> <span class="n">gt_count</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">abs_errors</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mf">0.0</span>
+
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">abs_errors</span><span class="p">))</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># MLflow helpers</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_experiment</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create or activate an MLflow experiment.</span>
+
+<span class="sd">        :param name: Experiment name.</span>
+<span class="sd">        :type name: str</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">mlflow</span><span class="o">.</span><span class="n">get_experiment_by_name</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">mlflow</span><span class="o">.</span><span class="n">create_experiment</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="n">mlflow</span><span class="o">.</span><span class="n">set_experiment</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_setup_mlflow</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Configure MLflow tracking URI and Ultralytics integration.&quot;&quot;&quot;</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;GIT_PYTHON_REFRESH&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;quiet&quot;</span>
+        <span class="n">mlflow</span><span class="o">.</span><span class="n">set_tracking_uri</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mlflow_uri</span><span class="p">)</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="s2">&quot;MLFLOW_TRACKING_URI&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mlflow_uri</span>
+        <span class="n">SETTINGS</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s2">&quot;mlflow&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">})</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_resolve_pt</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">yolo_size</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Resolve the full path to a base YOLO checkpoint.</span>
+
+<span class="sd">        :param yolo_size: Model size string.</span>
+<span class="sd">        :type yolo_size: str</span>
+<span class="sd">        :return: Absolute path to the ``.pt`` file.</span>
+<span class="sd">        :rtype: str</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_pt_dir</span><span class="p">,</span> <span class="n">YOLO_CONFIGS</span><span class="p">[</span><span class="s2">&quot;v8&quot;</span><span class="p">][</span><span class="n">yolo_size</span><span class="p">])</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_read_yaml</span><span class="p">(</span><span class="n">yaml_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">yaml_path</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span></div>
+
+
+
+<span class="c1"># ── Entry point ───────────────────────────────────────────────────────────────</span>
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">manager</span> <span class="o">=</span> <span class="n">TrainerManager</span><span class="p">(</span>
+        <span class="n">base_pt_dir</span> <span class="o">=</span> <span class="s2">&quot;/app/model_storage/yolo_cfg&quot;</span><span class="p">,</span>
+        <span class="n">runs_dir</span>    <span class="o">=</span> <span class="s2">&quot;/app/model_storage/mlruns&quot;</span><span class="p">,</span>
+        <span class="n">results_dir</span> <span class="o">=</span> <span class="s2">&quot;/app/results&quot;</span><span class="p">,</span>
+        <span class="n">nc</span>          <span class="o">=</span> <span class="mi">3</span><span class="p">,</span>                              <span class="c1"># RBC, WBC, Platelets</span>
+        <span class="n">mlflow_uri</span>  <span class="o">=</span> <span class="s2">&quot;http://mlflow-server:5000&quot;</span><span class="p">,</span>
+        <span class="n">test_dir</span>    <span class="o">=</span> <span class="s2">&quot;/app/data/aug_data/test/images&quot;</span><span class="p">,</span>
+        <span class="n">imgsz</span>       <span class="o">=</span> <span class="n">IMGSZ</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">dataset_name</span><span class="p">,</span> <span class="n">yaml_path</span> <span class="ow">in</span> <span class="n">DATASETS</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">for</span> <span class="n">yolo_size</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;n&quot;</span><span class="p">,</span> <span class="s2">&quot;s&quot;</span><span class="p">,</span> <span class="s2">&quot;m&quot;</span><span class="p">]:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="si">{</span><span class="s1">&#39;=&#39;</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">60</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;[TrainerManager] dataset=</span><span class="si">{</span><span class="n">dataset_name</span><span class="si">}</span><span class="s2"> | &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;model=yolov8</span><span class="si">{</span><span class="n">yolo_size</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="s1">&#39;=&#39;</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">60</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">manager</span><span class="o">.</span><span class="n">run</span><span class="p">(</span>
+                <span class="n">data</span>         <span class="o">=</span> <span class="n">yaml_path</span><span class="p">,</span>
+                <span class="n">dataset_name</span> <span class="o">=</span> <span class="n">dataset_name</span><span class="p">,</span>
+                <span class="n">yolo_size</span>    <span class="o">=</span> <span class="n">yolo_size</span><span class="p">,</span>
+            <span class="p">)</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

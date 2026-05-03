@@ -50,3 +50,7 @@ dmypy.json
 model_storage/mlruns/
 mlartifacts/
 *.db
+
+# Sphinx documentation exceptions
+!docs/build/
+!docs/_build/

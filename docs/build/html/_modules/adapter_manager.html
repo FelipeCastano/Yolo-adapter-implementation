@@ -1,0 +1,341 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>adapter_manager &mdash; Electronic Symbol Detector 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Electronic Symbol Detector
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../model.html">Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../data_management.html">Data Management</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Electronic Symbol Detector</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Module code</a></li>
+      <li class="breadcrumb-item active">adapter_manager</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for adapter_manager</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch.nn</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">nn</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">ultralytics.nn.modules.block</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">block_module</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">ultralytics</span><span class="w"> </span><span class="kn">import</span> <span class="n">YOLO</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">YOLO_adapter</span><span class="w"> </span><span class="kn">import</span> <span class="n">YOLOAdapterBlock</span><span class="p">,</span> <span class="n">C2f_Adapter</span>
+
+
+<div class="viewcode-block" id="AdapterManager">
+<a class="viewcode-back" href="../model.html#adapter_manager.AdapterManager">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">AdapterManager</span><span class="p">:</span>
+<span class="w">	</span><span class="sd">&quot;&quot;&quot;Manages the full lifecycle of YOLO-Adapter model construction and weight loading.</span>
+
+<span class="sd">	Handles C2f block replacement, layer freezing, data-driven weight</span>
+<span class="sd">	initialization, and checkpoint loading. Designed to be model-size agnostic:</span>
+<span class="sd">	the expansion ratio ``r`` is assigned automatically based on each C2f</span>
+<span class="sd">	block&#39;s parameter count.</span>
+
+<span class="sd">	:param pt_path: Path to the base YOLOv8 ``.pt`` checkpoint.</span>
+<span class="sd">	:type pt_path: str</span>
+
+<span class="sd">	.. rubric:: Expansion ratio thresholds</span>
+
+<span class="sd">	* ``N_p &gt; 5M`` → ``r = 1.0`` (Heavy)</span>
+<span class="sd">	* ``1M &lt; N_p ≤ 5M`` → ``r = 0.5`` (Medium)</span>
+<span class="sd">	* ``N_p ≤ 1M`` → ``r = 0.25`` (Light)</span>
+<span class="sd">	&quot;&quot;&quot;</span>
+
+	<span class="n">HEAVY_THRESHOLD</span>  <span class="o">=</span> <span class="mi">5_000_000</span>
+	<span class="n">MEDIUM_THRESHOLD</span> <span class="o">=</span> <span class="mi">1_000_000</span>
+
+	<span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pt_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">pt_path</span> <span class="o">=</span> <span class="n">pt_path</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">model</span>   <span class="o">=</span> <span class="kc">None</span>
+
+<div class="viewcode-block" id="AdapterManager.build">
+<a class="viewcode-back" href="../model.html#adapter_manager.AdapterManager.build">[docs]</a>
+	<span class="k">def</span><span class="w"> </span><span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nc</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">YOLO</span><span class="p">:</span>
+<span class="w">		</span><span class="sd">&quot;&quot;&quot;Build the adapted model from the base checkpoint.</span>
+
+<span class="sd">		Replaces all C2f blocks with :class:`~YOLO_adapter.C2f_Adapter`,</span>
+<span class="sd">		copies the original C2f weights, freezes the backbone, and prints</span>
+<span class="sd">		a parameter summary.</span>
+
+<span class="sd">		:param nc: Number of output classes. If ``None``, keeps the original</span>
+<span class="sd">			checkpoint value (80 for COCO). When provided, the detection head</span>
+<span class="sd">			is reinitialised with the new class count.</span>
+<span class="sd">		:type nc: int, optional</span>
+<span class="sd">		:return: The adapted YOLO model ready for training.</span>
+<span class="sd">		:rtype: YOLO</span>
+<span class="sd">		&quot;&quot;&quot;</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="o">=</span> <span class="n">YOLO</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pt_path</span><span class="p">)</span>
+
+		<span class="k">if</span> <span class="n">nc</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">nc</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">nc</span><span class="p">:</span>
+			<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[AdapterManager] Adjusting nc: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">nc</span><span class="si">}</span><span class="s2"> → </span><span class="si">{</span><span class="n">nc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+			<span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">nc</span> <span class="o">=</span> <span class="n">nc</span>
+			<span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">yaml</span><span class="p">[</span><span class="s1">&#39;nc&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">nc</span>
+
+		<span class="bp">self</span><span class="o">.</span><span class="n">_replace_c2f_blocks</span><span class="p">()</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">_freeze_backbone</span><span class="p">()</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">_print_summary</span><span class="p">()</span>
+		<span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span></div>
+
+
+<div class="viewcode-block" id="AdapterManager.load_trained">
+<a class="viewcode-back" href="../model.html#adapter_manager.AdapterManager.load_trained">[docs]</a>
+	<span class="k">def</span><span class="w"> </span><span class="nf">load_trained</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weights_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">nc</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">YOLO</span><span class="p">:</span>
+<span class="w">		</span><span class="sd">&quot;&quot;&quot;Rebuild the adapted architecture and load fine-tuned weights.</span>
+
+<span class="sd">		Useful for inference: rebuilds the custom architecture (required since</span>
+<span class="sd">		Ultralytics cannot deserialize :class:`~YOLO_adapter.C2f_Adapter`</span>
+<span class="sd">		from a plain checkpoint without the custom architecture being present)</span>
+<span class="sd">		and then loads the trained state dict.</span>
+
+<span class="sd">		:param weights_path: Path to the fine-tuned ``.pt`` checkpoint produced</span>
+<span class="sd">			by :class:`~custom_trainer.CustomTrainer`.</span>
+<span class="sd">		:type weights_path: str</span>
+<span class="sd">		:param nc: Number of output classes. Must match the value used during</span>
+<span class="sd">			training. If ``None``, keeps the original checkpoint value (80).</span>
+<span class="sd">		:type nc: int, optional</span>
+<span class="sd">		:return: The adapted YOLO model with trained weights loaded.</span>
+<span class="sd">		:rtype: YOLO</span>
+<span class="sd">		&quot;&quot;&quot;</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">model</span>     <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">build</span><span class="p">(</span><span class="n">nc</span><span class="o">=</span><span class="n">nc</span><span class="p">)</span>
+		<span class="n">checkpoint</span>     <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">weights_path</span><span class="p">,</span> <span class="n">map_location</span><span class="o">=</span><span class="s1">&#39;cpu&#39;</span><span class="p">,</span> <span class="n">weights_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">checkpoint</span><span class="p">[</span><span class="s1">&#39;model&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(),</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">names</span> <span class="o">=</span> <span class="n">checkpoint</span><span class="p">[</span><span class="s1">&#39;model&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">names</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">nc</span>    <span class="o">=</span> <span class="n">checkpoint</span><span class="p">[</span><span class="s1">&#39;model&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">nc</span>
+		<span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span></div>
+
+
+<div class="viewcode-block" id="AdapterManager.init_adapters_from_data">
+<a class="viewcode-back" href="../model.html#adapter_manager.AdapterManager.init_adapters_from_data">[docs]</a>
+	<span class="k">def</span><span class="w"> </span><span class="nf">init_adapters_from_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataloader</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s1">&#39;cpu&#39;</span><span class="p">):</span>
+<span class="w">		</span><span class="sd">&quot;&quot;&quot;Run data-driven adapter weight initialization.</span>
+
+<span class="sd">		Performs a single forward pass over the full dataloader to compute</span>
+<span class="sd">		the variance ratio λ for each :class:`~YOLO_adapter.C2f_Adapter` block,</span>
+<span class="sd">		then reinitialises the adapter weights with ``N(0, 2λ / (n_in + n_out))``.</span>
+<span class="sd">		Must be called after :meth:`build`.</span>
+
+<span class="sd">		:param dataloader: DataLoader yielding batches with an ``&#39;img&#39;`` key</span>
+<span class="sd">			containing uint8 tensors of shape ``(B, 3, H, W)``.</span>
+<span class="sd">		:param device: Torch device string, e.g. ``&#39;cpu&#39;`` or ``&#39;cuda:0&#39;``.</span>
+<span class="sd">		:type device: str</span>
+<span class="sd">		:raises AssertionError: If :meth:`build` has not been called first.</span>
+<span class="sd">		&quot;&quot;&quot;</span>
+		<span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;Call build() before init_adapters_from_data()&quot;</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">_compute_lambda_and_init</span><span class="p">(</span><span class="n">dataloader</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span></div>
+
+
+	<span class="c1"># ── Private ───────────────────────────────────────────────────────────────</span>
+
+	<span class="k">def</span><span class="w"> </span><span class="nf">_get_expansion_ratio</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_params</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">		</span><span class="sd">&quot;&quot;&quot;Return the adapter expansion ratio based on block parameter count.</span>
+
+<span class="sd">		:param n_params: Total number of parameters in the C2f block.</span>
+<span class="sd">		:type n_params: int</span>
+<span class="sd">		:return: Expansion ratio ``r`` in ``{0.25, 0.5, 1.0}``.</span>
+<span class="sd">		:rtype: float</span>
+<span class="sd">		&quot;&quot;&quot;</span>
+		<span class="k">if</span> <span class="n">n_params</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">HEAVY_THRESHOLD</span><span class="p">:</span>
+			<span class="k">return</span> <span class="mf">1.0</span>
+		<span class="k">elif</span> <span class="n">n_params</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">MEDIUM_THRESHOLD</span><span class="p">:</span>
+			<span class="k">return</span> <span class="mf">0.5</span>
+		<span class="k">return</span> <span class="mf">0.25</span>
+
+	<span class="k">def</span><span class="w"> </span><span class="nf">_replace_c2f_blocks</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">		</span><span class="sd">&quot;&quot;&quot;Replace every C2f block in the model with a C2f_Adapter.</span>
+
+<span class="sd">		Copies the original C2f weights using ``strict=False`` and transfers</span>
+<span class="sd">		the Ultralytics graph metadata attributes (``f``, ``i``, ``type``)</span>
+<span class="sd">		required by ``_predict_once``.</span>
+<span class="sd">		&quot;&quot;&quot;</span>
+		<span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">named_modules</span><span class="p">()):</span>
+			<span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">module</span><span class="p">)</span> <span class="ow">is</span> <span class="n">block_module</span><span class="o">.</span><span class="n">C2f</span><span class="p">:</span>
+				<span class="n">parent_name</span><span class="p">,</span> <span class="n">child_name</span> <span class="o">=</span> <span class="n">name</span><span class="o">.</span><span class="n">rsplit</span><span class="p">(</span><span class="s2">&quot;.&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+				<span class="n">parent</span>   <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">get_submodule</span><span class="p">(</span><span class="n">parent_name</span><span class="p">)</span>
+				<span class="n">c1</span>       <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">cv1</span><span class="o">.</span><span class="n">conv</span><span class="o">.</span><span class="n">in_channels</span>
+				<span class="n">c2</span>       <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">cv2</span><span class="o">.</span><span class="n">conv</span><span class="o">.</span><span class="n">out_channels</span>
+				<span class="n">n</span>        <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">m</span><span class="p">)</span>
+				<span class="n">n_params</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span>
+				<span class="n">r</span>        <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_expansion_ratio</span><span class="p">(</span><span class="n">n_params</span><span class="p">)</span>
+				<span class="n">adapter</span>  <span class="o">=</span> <span class="n">C2f_Adapter</span><span class="p">(</span><span class="n">c1</span><span class="p">,</span> <span class="n">c2</span><span class="p">,</span> <span class="n">n</span><span class="o">=</span><span class="n">n</span><span class="p">,</span> <span class="n">r</span><span class="o">=</span><span class="n">r</span><span class="p">)</span>
+				<span class="n">adapter</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">state_dict</span><span class="p">(),</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+				<span class="n">adapter</span><span class="o">.</span><span class="n">f</span>    <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">f</span>
+				<span class="n">adapter</span><span class="o">.</span><span class="n">i</span>    <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">i</span>
+				<span class="n">adapter</span><span class="o">.</span><span class="n">type</span> <span class="o">=</span> <span class="n">module</span><span class="o">.</span><span class="n">type</span>
+				<span class="nb">setattr</span><span class="p">(</span><span class="n">parent</span><span class="p">,</span> <span class="n">child_name</span><span class="p">,</span> <span class="n">adapter</span><span class="p">)</span>
+				<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: N_p=</span><span class="si">{</span><span class="n">n_params</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">  r=</span><span class="si">{</span><span class="n">r</span><span class="si">}</span><span class="s2">  c_hidden=</span><span class="si">{</span><span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="nb">int</span><span class="p">(</span><span class="n">c1</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">r</span><span class="p">))</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+	<span class="k">def</span><span class="w"> </span><span class="nf">_freeze_backbone</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">		</span><span class="sd">&quot;&quot;&quot;Freeze all model parameters except those inside YOLOAdapterBlock.&quot;&quot;&quot;</span>
+		<span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
+			<span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="kc">False</span>
+		<span class="k">for</span> <span class="n">module</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">modules</span><span class="p">():</span>
+			<span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">YOLOAdapterBlock</span><span class="p">):</span>
+				<span class="k">for</span> <span class="n">param</span> <span class="ow">in</span> <span class="n">module</span><span class="o">.</span><span class="n">parameters</span><span class="p">():</span>
+					<span class="n">param</span><span class="o">.</span><span class="n">requires_grad</span> <span class="o">=</span> <span class="kc">True</span>
+
+	<span class="k">def</span><span class="w"> </span><span class="nf">_compute_lambda_and_init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataloader</span><span class="p">,</span> <span class="n">device</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+<span class="w">		</span><span class="sd">&quot;&quot;&quot;Compute λ for each adapter and reinitialise its weights.</span>
+
+<span class="sd">		Registers forward hooks on every :class:`~YOLO_adapter.C2f_Adapter`</span>
+<span class="sd">		to record input and output variance statistics across the full</span>
+<span class="sd">		dataloader, then calls :meth:`_init_adapter_weights` with the computed λ.</span>
+
+<span class="sd">		:param dataloader: DataLoader yielding batches with an ``&#39;img&#39;`` key.</span>
+<span class="sd">		:param device: Torch device string.</span>
+<span class="sd">		:type device: str</span>
+<span class="sd">		&quot;&quot;&quot;</span>
+		<span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+		<span class="n">hooks</span> <span class="o">=</span> <span class="p">[]</span>
+		<span class="n">stats</span> <span class="o">=</span> <span class="p">{}</span>
+
+		<span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">named_modules</span><span class="p">():</span>
+			<span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">C2f_Adapter</span><span class="p">):</span>
+				<span class="n">stats</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;in&#39;</span><span class="p">:</span> <span class="p">[],</span> <span class="s1">&#39;out&#39;</span><span class="p">:</span> <span class="p">[]}</span>
+
+				<span class="k">def</span><span class="w"> </span><span class="nf">make_hook</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+					<span class="k">def</span><span class="w"> </span><span class="nf">hook</span><span class="p">(</span><span class="n">mod</span><span class="p">,</span> <span class="n">inp</span><span class="p">,</span> <span class="n">out</span><span class="p">):</span>
+						<span class="n">stats</span><span class="p">[</span><span class="n">n</span><span class="p">][</span><span class="s1">&#39;in&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">inp</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">var</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+						<span class="n">stats</span><span class="p">[</span><span class="n">n</span><span class="p">][</span><span class="s1">&#39;out&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">out</span><span class="o">.</span><span class="n">detach</span><span class="p">()</span><span class="o">.</span><span class="n">var</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span><span class="o">.</span><span class="n">item</span><span class="p">())</span>
+					<span class="k">return</span> <span class="n">hook</span>
+
+				<span class="n">hooks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">register_forward_hook</span><span class="p">(</span><span class="n">make_hook</span><span class="p">(</span><span class="n">name</span><span class="p">)))</span>
+
+		<span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+			<span class="k">for</span> <span class="n">batch</span> <span class="ow">in</span> <span class="n">dataloader</span><span class="p">:</span>
+				<span class="n">imgs</span> <span class="o">=</span> <span class="n">batch</span><span class="p">[</span><span class="s1">&#39;img&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">float</span><span class="p">()</span> <span class="o">/</span> <span class="mf">255.0</span>
+				<span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="p">(</span><span class="n">imgs</span><span class="p">)</span>
+
+		<span class="k">for</span> <span class="n">h</span> <span class="ow">in</span> <span class="n">hooks</span><span class="p">:</span>
+			<span class="n">h</span><span class="o">.</span><span class="n">remove</span><span class="p">()</span>
+
+		<span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">module</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">named_modules</span><span class="p">():</span>
+			<span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">module</span><span class="p">,</span> <span class="n">C2f_Adapter</span><span class="p">)</span> <span class="ow">and</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">stats</span><span class="p">:</span>
+				<span class="n">mean_var_in</span>  <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">stats</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="s1">&#39;in&#39;</span><span class="p">])</span>  <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">stats</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="s1">&#39;in&#39;</span><span class="p">])</span>
+				<span class="n">mean_var_out</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">stats</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="s1">&#39;out&#39;</span><span class="p">])</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">stats</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="s1">&#39;out&#39;</span><span class="p">])</span>
+				<span class="n">lam</span>          <span class="o">=</span> <span class="n">mean_var_out</span> <span class="o">/</span> <span class="p">(</span><span class="n">mean_var_in</span> <span class="o">+</span> <span class="mf">1e-8</span><span class="p">)</span>
+				<span class="bp">self</span><span class="o">.</span><span class="n">_init_adapter_weights</span><span class="p">(</span><span class="n">module</span><span class="o">.</span><span class="n">adapter</span><span class="p">,</span> <span class="n">lam</span><span class="p">)</span>
+				<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  [λ-init] </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">: λ=</span><span class="si">{</span><span class="n">lam</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+		<span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">train</span><span class="p">()</span>
+
+	<span class="nd">@staticmethod</span>
+	<span class="k">def</span><span class="w"> </span><span class="nf">_init_adapter_weights</span><span class="p">(</span><span class="n">adapter_block</span><span class="p">:</span> <span class="n">YOLOAdapterBlock</span><span class="p">,</span> <span class="n">lam</span><span class="p">:</span> <span class="nb">float</span><span class="p">):</span>
+<span class="w">		</span><span class="sd">&quot;&quot;&quot;Initialise adapter weights with the data-driven Xavier strategy.</span>
+
+<span class="sd">		Each convolutional layer is initialised from</span>
+<span class="sd">		``N(0, sqrt(2λ / (n_in + n_out)))``, where ``n_in`` and ``n_out``</span>
+<span class="sd">		are the fan-in and fan-out of the layer, and λ is the variance ratio</span>
+<span class="sd">		of the parallel C2f block computed from a forward pass over the</span>
+<span class="sd">		training data. Bias terms are initialised to zero.</span>
+
+<span class="sd">		:param adapter_block: The :class:`~YOLO_adapter.YOLOAdapterBlock`</span>
+<span class="sd">			whose weights will be reinitialised.</span>
+<span class="sd">		:type adapter_block: YOLOAdapterBlock</span>
+<span class="sd">		:param lam: Variance ratio λ = E[Var(X_out)] / E[Var(X_in)] computed</span>
+<span class="sd">			from the parallel C2f block.</span>
+<span class="sd">		:type lam: float</span>
+<span class="sd">		&quot;&quot;&quot;</span>
+		<span class="k">for</span> <span class="n">layer</span> <span class="ow">in</span> <span class="p">[</span><span class="n">adapter_block</span><span class="o">.</span><span class="n">conv2d</span><span class="p">,</span> <span class="n">adapter_block</span><span class="o">.</span><span class="n">conv_transpose</span><span class="p">]:</span>
+			<span class="n">n_in</span>  <span class="o">=</span> <span class="n">layer</span><span class="o">.</span><span class="n">in_channels</span>  <span class="o">*</span> <span class="n">layer</span><span class="o">.</span><span class="n">kernel_size</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">layer</span><span class="o">.</span><span class="n">kernel_size</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+			<span class="n">n_out</span> <span class="o">=</span> <span class="n">layer</span><span class="o">.</span><span class="n">out_channels</span> <span class="o">*</span> <span class="n">layer</span><span class="o">.</span><span class="n">kernel_size</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">layer</span><span class="o">.</span><span class="n">kernel_size</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+			<span class="n">std</span>   <span class="o">=</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">lam</span> <span class="o">/</span> <span class="p">(</span><span class="n">n_in</span> <span class="o">+</span> <span class="n">n_out</span><span class="p">))</span> <span class="o">**</span> <span class="mf">0.5</span>
+			<span class="n">nn</span><span class="o">.</span><span class="n">init</span><span class="o">.</span><span class="n">normal_</span><span class="p">(</span><span class="n">layer</span><span class="o">.</span><span class="n">weight</span><span class="p">,</span> <span class="n">mean</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">std</span><span class="o">=</span><span class="n">std</span><span class="p">)</span>
+			<span class="k">if</span> <span class="n">layer</span><span class="o">.</span><span class="n">bias</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+				<span class="n">nn</span><span class="o">.</span><span class="n">init</span><span class="o">.</span><span class="n">zeros_</span><span class="p">(</span><span class="n">layer</span><span class="o">.</span><span class="n">bias</span><span class="p">)</span>
+
+	<span class="k">def</span><span class="w"> </span><span class="nf">_print_summary</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">		</span><span class="sd">&quot;&quot;&quot;Print a summary of trainable vs frozen parameters.&quot;&quot;&quot;</span>
+		<span class="n">total</span>      <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">())</span>
+		<span class="n">trainable</span>  <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">p</span><span class="o">.</span><span class="n">numel</span><span class="p">()</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">parameters</span><span class="p">()</span> <span class="k">if</span> <span class="n">p</span><span class="o">.</span><span class="n">requires_grad</span><span class="p">)</span>
+		<span class="n">n_adapters</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">modules</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="n">C2f_Adapter</span><span class="p">))</span>
+		<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">C2f_Adapter blocks inserted : </span><span class="si">{</span><span class="n">n_adapters</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+		<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total parameters            : </span><span class="si">{</span><span class="n">total</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+		<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Trainable parameters        : </span><span class="si">{</span><span class="n">trainable</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">  (</span><span class="si">{</span><span class="mi">100</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">trainable</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">total</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">%)&quot;</span><span class="p">)</span>
+		<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Frozen parameters           : </span><span class="si">{</span><span class="n">total</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">trainable</span><span class="si">:</span><span class="s2">,</span><span class="si">}</span><span class="s2">  (</span><span class="si">{</span><span class="mi">100</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="n">total</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">trainable</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">total</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">%)&quot;</span><span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

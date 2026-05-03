@@ -1,0 +1,567 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Model &mdash; Electronic Symbol Detector 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Data Management" href="data_management.html" />
+    <link rel="prev" title="Electronic Symbol Detector" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            Electronic Symbol Detector
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Model</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#YOLO_adapter.C2f_Adapter"><code class="docutils literal notranslate"><span class="pre">C2f_Adapter</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#YOLO_adapter.C2f_Adapter.forward"><code class="docutils literal notranslate"><span class="pre">C2f_Adapter.forward()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#YOLO_adapter.YOLOAdapterBlock"><code class="docutils literal notranslate"><span class="pre">YOLOAdapterBlock</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#YOLO_adapter.YOLOAdapterBlock.forward"><code class="docutils literal notranslate"><span class="pre">YOLOAdapterBlock.forward()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#adapter_manager.AdapterManager"><code class="docutils literal notranslate"><span class="pre">AdapterManager</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#adapter_manager.AdapterManager.HEAVY_THRESHOLD"><code class="docutils literal notranslate"><span class="pre">AdapterManager.HEAVY_THRESHOLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#adapter_manager.AdapterManager.MEDIUM_THRESHOLD"><code class="docutils literal notranslate"><span class="pre">AdapterManager.MEDIUM_THRESHOLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#adapter_manager.AdapterManager.build"><code class="docutils literal notranslate"><span class="pre">AdapterManager.build()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#adapter_manager.AdapterManager.init_adapters_from_data"><code class="docutils literal notranslate"><span class="pre">AdapterManager.init_adapters_from_data()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#adapter_manager.AdapterManager.load_trained"><code class="docutils literal notranslate"><span class="pre">AdapterManager.load_trained()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#custom_trainer.CustomTrainer"><code class="docutils literal notranslate"><span class="pre">CustomTrainer</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#custom_trainer.CustomTrainer.get_model"><code class="docutils literal notranslate"><span class="pre">CustomTrainer.get_model()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#custom_trainer.CustomTrainer.save_model"><code class="docutils literal notranslate"><span class="pre">CustomTrainer.save_model()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#trainer_manager.TrainerManager"><code class="docutils literal notranslate"><span class="pre">TrainerManager</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#trainer_manager.TrainerManager.run"><code class="docutils literal notranslate"><span class="pre">TrainerManager.run()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#handler.YOLOAdapterHandler"><code class="docutils literal notranslate"><span class="pre">YOLOAdapterHandler</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#handler.YOLOAdapterHandler.BINARIZE_THRESHOLD"><code class="docutils literal notranslate"><span class="pre">YOLOAdapterHandler.BINARIZE_THRESHOLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#handler.YOLOAdapterHandler.CLASS_NAMES"><code class="docutils literal notranslate"><span class="pre">YOLOAdapterHandler.CLASS_NAMES</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#handler.YOLOAdapterHandler.CONF_THRESHOLD"><code class="docutils literal notranslate"><span class="pre">YOLOAdapterHandler.CONF_THRESHOLD</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#handler.YOLOAdapterHandler.IMGSZ"><code class="docutils literal notranslate"><span class="pre">YOLOAdapterHandler.IMGSZ</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#handler.YOLOAdapterHandler.inference"><code class="docutils literal notranslate"><span class="pre">YOLOAdapterHandler.inference()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#handler.YOLOAdapterHandler.initialize"><code class="docutils literal notranslate"><span class="pre">YOLOAdapterHandler.initialize()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#handler.YOLOAdapterHandler.postprocess"><code class="docutils literal notranslate"><span class="pre">YOLOAdapterHandler.postprocess()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#handler.YOLOAdapterHandler.preprocess"><code class="docutils literal notranslate"><span class="pre">YOLOAdapterHandler.preprocess()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="data_management.html">Data Management</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">Electronic Symbol Detector</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Model</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/model.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-YOLO_adapter">
+<span id="model"></span><h1>Model<a class="headerlink" href="#module-YOLO_adapter" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="YOLO_adapter.C2f_Adapter">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">YOLO_adapter.</span></span><span class="sig-name descname"><span class="pre">C2f_Adapter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">c1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">c2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">shortcut</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">g</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">e</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.25</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/YOLO_adapter.html#C2f_Adapter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#YOLO_adapter.C2f_Adapter" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">C2f</span></code></p>
+<p>Drop-in replacement for <code class="xref py py-class docutils literal notranslate"><span class="pre">C2f</span></code> that
+adds a parallel <a class="reference internal" href="#YOLO_adapter.YOLOAdapterBlock" title="YOLO_adapter.YOLOAdapterBlock"><code class="xref py py-class docutils literal notranslate"><span class="pre">YOLOAdapterBlock</span></code></a> whose output is summed
+element-wise with the original C2f output.</p>
+<p>The expansion ratio <code class="docutils literal notranslate"><span class="pre">r</span></code> is assigned dynamically by
+<a class="reference internal" href="#adapter_manager.AdapterManager" title="adapter_manager.AdapterManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">AdapterManager</span></code></a> based on the parameter count of
+the original C2f block:</p>
+<ul class="simple">
+<li><p><strong>Heavy</strong> (<code class="docutils literal notranslate"><span class="pre">N_p</span> <span class="pre">&gt;</span> <span class="pre">5M</span></code>): <code class="docutils literal notranslate"><span class="pre">r</span> <span class="pre">=</span> <span class="pre">1.0</span></code></p></li>
+<li><p><strong>Medium</strong> (<code class="docutils literal notranslate"><span class="pre">1M</span> <span class="pre">&lt;</span> <span class="pre">N_p</span> <span class="pre">≤</span> <span class="pre">5M</span></code>): <code class="docutils literal notranslate"><span class="pre">r</span> <span class="pre">=</span> <span class="pre">0.5</span></code></p></li>
+<li><p><strong>Light</strong> (<code class="docutils literal notranslate"><span class="pre">N_p</span> <span class="pre">≤</span> <span class="pre">1M</span></code>): <code class="docutils literal notranslate"><span class="pre">r</span> <span class="pre">=</span> <span class="pre">0.25</span></code></p></li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>c1</strong> (<em>int</em>) – Number of input channels.</p></li>
+<li><p><strong>c2</strong> (<em>int</em>) – Number of output channels.</p></li>
+<li><p><strong>n</strong> (<em>int</em>) – Number of bottleneck repetitions.</p></li>
+<li><p><strong>shortcut</strong> (<em>bool</em>) – Whether to use residual shortcuts in bottleneck blocks.</p></li>
+<li><p><strong>g</strong> (<em>int</em>) – Number of groups for grouped convolution.</p></li>
+<li><p><strong>e</strong> (<em>float</em>) – Channel expansion ratio for the hidden dimension inside C2f.</p></li>
+<li><p><strong>r</strong> (<em>float</em>) – Channel expansion ratio for the adapter hidden dimension.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="YOLO_adapter.C2f_Adapter.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/YOLO_adapter.html#C2f_Adapter.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#YOLO_adapter.C2f_Adapter.forward" title="Link to this definition"></a></dt>
+<dd><p>Run the C2f forward pass and add the adapter output element-wise.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>x</strong> (<em>torch.Tensor</em>) – Input feature map of shape <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">C_in,</span> <span class="pre">H,</span> <span class="pre">W)</span></code>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Sum of the C2f output and the adapter output,
+both of shape <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">C_out,</span> <span class="pre">H,</span> <span class="pre">W)</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="YOLO_adapter.YOLOAdapterBlock">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">YOLO_adapter.</span></span><span class="sig-name descname"><span class="pre">YOLOAdapterBlock</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">c1</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">c2</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.25</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">p</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/YOLO_adapter.html#YOLOAdapterBlock"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#YOLO_adapter.YOLOAdapterBlock" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code></p>
+<p>Lightweight bottleneck adapter inserted in parallel with a C2f block.</p>
+<p>Performs a spatial downsampling via <code class="xref py py-class docutils literal notranslate"><span class="pre">Conv2d</span></code> followed by
+an upsampling via <code class="xref py py-class docutils literal notranslate"><span class="pre">ConvTranspose2d</span></code>, forcing the adapter
+to learn a compressed representation before being added element-wise to
+the C2f output.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>c1</strong> (<em>int</em>) – Number of input channels.</p></li>
+<li><p><strong>c2</strong> (<em>int</em>) – Number of output channels.</p></li>
+<li><p><strong>r</strong> (<em>float</em>) – Channel expansion ratio used to compute the hidden dimension
+as <code class="docutils literal notranslate"><span class="pre">max(1,</span> <span class="pre">int(c1</span> <span class="pre">*</span> <span class="pre">r))</span></code>. Assigned dynamically based on the
+parameter count of the parallel C2f block.</p></li>
+<li><p><strong>k</strong> (<em>int</em>) – Kernel size for both convolutional layers.</p></li>
+<li><p><strong>s</strong> (<em>int</em>) – Stride for both convolutional layers.</p></li>
+<li><p><strong>p</strong> (<em>int</em>) – Padding for both convolutional layers.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="YOLO_adapter.YOLOAdapterBlock.forward">
+<span class="sig-name descname"><span class="pre">forward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/YOLO_adapter.html#YOLOAdapterBlock.forward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#YOLO_adapter.YOLOAdapterBlock.forward" title="Link to this definition"></a></dt>
+<dd><p>Run the adapter forward pass.</p>
+<p>Downsamples the input spatially, applies ReLU, then upsamples back to
+the original spatial dimensions using <code class="docutils literal notranslate"><span class="pre">output_size</span></code> to handle inputs
+with odd spatial dimensions.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>x</strong> (<em>torch.Tensor</em>) – Input feature map of shape <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">C_in,</span> <span class="pre">H,</span> <span class="pre">W)</span></code>.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Output feature map of shape <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">C_out,</span> <span class="pre">H,</span> <span class="pre">W)</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.Tensor</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class" id="module-adapter_manager">
+<dt class="sig sig-object py" id="adapter_manager.AdapterManager">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">adapter_manager.</span></span><span class="sig-name descname"><span class="pre">AdapterManager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pt_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/adapter_manager.html#AdapterManager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adapter_manager.AdapterManager" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Manages the full lifecycle of YOLO-Adapter model construction and weight loading.</p>
+<p>Handles C2f block replacement, layer freezing, data-driven weight
+initialization, and checkpoint loading. Designed to be model-size agnostic:
+the expansion ratio <code class="docutils literal notranslate"><span class="pre">r</span></code> is assigned automatically based on each C2f
+block’s parameter count.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>pt_path</strong> (<em>str</em>) – Path to the base YOLOv8 <code class="docutils literal notranslate"><span class="pre">.pt</span></code> checkpoint.</p>
+</dd>
+</dl>
+<p class="rubric">Expansion ratio thresholds</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">N_p</span> <span class="pre">&gt;</span> <span class="pre">5M</span></code> → <code class="docutils literal notranslate"><span class="pre">r</span> <span class="pre">=</span> <span class="pre">1.0</span></code> (Heavy)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">1M</span> <span class="pre">&lt;</span> <span class="pre">N_p</span> <span class="pre">≤</span> <span class="pre">5M</span></code> → <code class="docutils literal notranslate"><span class="pre">r</span> <span class="pre">=</span> <span class="pre">0.5</span></code> (Medium)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">N_p</span> <span class="pre">≤</span> <span class="pre">1M</span></code> → <code class="docutils literal notranslate"><span class="pre">r</span> <span class="pre">=</span> <span class="pre">0.25</span></code> (Light)</p></li>
+</ul>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adapter_manager.AdapterManager.HEAVY_THRESHOLD">
+<span class="sig-name descname"><span class="pre">HEAVY_THRESHOLD</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">5000000</span></span><a class="headerlink" href="#adapter_manager.AdapterManager.HEAVY_THRESHOLD" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adapter_manager.AdapterManager.MEDIUM_THRESHOLD">
+<span class="sig-name descname"><span class="pre">MEDIUM_THRESHOLD</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">1000000</span></span><a class="headerlink" href="#adapter_manager.AdapterManager.MEDIUM_THRESHOLD" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adapter_manager.AdapterManager.build">
+<span class="sig-name descname"><span class="pre">build</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">YOLO</span></span></span><a class="reference internal" href="_modules/adapter_manager.html#AdapterManager.build"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adapter_manager.AdapterManager.build" title="Link to this definition"></a></dt>
+<dd><p>Build the adapted model from the base checkpoint.</p>
+<p>Replaces all C2f blocks with <a class="reference internal" href="#YOLO_adapter.C2f_Adapter" title="YOLO_adapter.C2f_Adapter"><code class="xref py py-class docutils literal notranslate"><span class="pre">C2f_Adapter</span></code></a>,
+copies the original C2f weights, freezes the backbone, and prints
+a parameter summary.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>nc</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of output classes. If <code class="docutils literal notranslate"><span class="pre">None</span></code>, keeps the original
+checkpoint value (80 for COCO). When provided, the detection head
+is reinitialised with the new class count.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The adapted YOLO model ready for training.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>YOLO</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adapter_manager.AdapterManager.init_adapters_from_data">
+<span class="sig-name descname"><span class="pre">init_adapters_from_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dataloader</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">device</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'cpu'</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/adapter_manager.html#AdapterManager.init_adapters_from_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adapter_manager.AdapterManager.init_adapters_from_data" title="Link to this definition"></a></dt>
+<dd><p>Run data-driven adapter weight initialization.</p>
+<p>Performs a single forward pass over the full dataloader to compute
+the variance ratio λ for each <a class="reference internal" href="#YOLO_adapter.C2f_Adapter" title="YOLO_adapter.C2f_Adapter"><code class="xref py py-class docutils literal notranslate"><span class="pre">C2f_Adapter</span></code></a> block,
+then reinitialises the adapter weights with <code class="docutils literal notranslate"><span class="pre">N(0,</span> <span class="pre">2λ</span> <span class="pre">/</span> <span class="pre">(n_in</span> <span class="pre">+</span> <span class="pre">n_out))</span></code>.
+Must be called after <a class="reference internal" href="#adapter_manager.AdapterManager.build" title="adapter_manager.AdapterManager.build"><code class="xref py py-meth docutils literal notranslate"><span class="pre">build()</span></code></a>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dataloader</strong> – DataLoader yielding batches with an <code class="docutils literal notranslate"><span class="pre">'img'</span></code> key
+containing uint8 tensors of shape <code class="docutils literal notranslate"><span class="pre">(B,</span> <span class="pre">3,</span> <span class="pre">H,</span> <span class="pre">W)</span></code>.</p></li>
+<li><p><strong>device</strong> (<em>str</em>) – Torch device string, e.g. <code class="docutils literal notranslate"><span class="pre">'cpu'</span></code> or <code class="docutils literal notranslate"><span class="pre">'cuda:0'</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>AssertionError</strong> – If <a class="reference internal" href="#adapter_manager.AdapterManager.build" title="adapter_manager.AdapterManager.build"><code class="xref py py-meth docutils literal notranslate"><span class="pre">build()</span></code></a> has not been called first.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adapter_manager.AdapterManager.load_trained">
+<span class="sig-name descname"><span class="pre">load_trained</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">weights_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">YOLO</span></span></span><a class="reference internal" href="_modules/adapter_manager.html#AdapterManager.load_trained"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adapter_manager.AdapterManager.load_trained" title="Link to this definition"></a></dt>
+<dd><p>Rebuild the adapted architecture and load fine-tuned weights.</p>
+<p>Useful for inference: rebuilds the custom architecture (required since
+Ultralytics cannot deserialize <a class="reference internal" href="#YOLO_adapter.C2f_Adapter" title="YOLO_adapter.C2f_Adapter"><code class="xref py py-class docutils literal notranslate"><span class="pre">C2f_Adapter</span></code></a>
+from a plain checkpoint without the custom architecture being present)
+and then loads the trained state dict.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>weights_path</strong> (<em>str</em>) – Path to the fine-tuned <code class="docutils literal notranslate"><span class="pre">.pt</span></code> checkpoint produced
+by <a class="reference internal" href="#custom_trainer.CustomTrainer" title="custom_trainer.CustomTrainer"><code class="xref py py-class docutils literal notranslate"><span class="pre">CustomTrainer</span></code></a>.</p></li>
+<li><p><strong>nc</strong> (<em>int</em><em>, </em><em>optional</em>) – Number of output classes. Must match the value used during
+training. If <code class="docutils literal notranslate"><span class="pre">None</span></code>, keeps the original checkpoint value (80).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The adapted YOLO model with trained weights loaded.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>YOLO</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class" id="module-custom_trainer">
+<dt class="sig sig-object py" id="custom_trainer.CustomTrainer">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">custom_trainer.</span></span><span class="sig-name descname"><span class="pre">CustomTrainer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">adapted_model</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/custom_trainer.html#CustomTrainer"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#custom_trainer.CustomTrainer" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">DetectionTrainer</span></code></p>
+<p>Custom Ultralytics trainer that preserves adapter-only training.</p>
+<p>Subclasses <code class="xref py py-class docutils literal notranslate"><span class="pre">DetectionTrainer</span></code> to:</p>
+<ul class="simple">
+<li><p>Inject the pre-built adapted model, bypassing Ultralytics model
+reconstruction from YAML.</p></li>
+<li><p>Re-apply parameter freezing after the parent <code class="docutils literal notranslate"><span class="pre">_setup_train</span></code> unfreezes
+all layers.</p></li>
+<li><p>Run data-driven λ initialization using the training dataloader.</p></li>
+<li><p>Rebuild the optimizer’s parameter groups and learning-rate scheduler to
+include only the trainable adapter parameters.</p></li>
+<li><p>Save checkpoints with the correct adapted architecture instead of the
+default Ultralytics 80-class serialization.</p></li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>adapted_model</strong> (<em>ultralytics.YOLO</em>) – The adapted YOLO model returned by
+<a class="reference internal" href="#adapter_manager.AdapterManager.build" title="adapter_manager.AdapterManager.build"><code class="xref py py-meth docutils literal notranslate"><span class="pre">build()</span></code></a>.</p></li>
+<li><p><strong>kwargs</strong> – Keyword arguments forwarded to
+<code class="xref py py-class docutils literal notranslate"><span class="pre">DetectionTrainer</span></code>, including
+the <code class="docutils literal notranslate"><span class="pre">overrides</span></code> dict with training hyperparameters.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="custom_trainer.CustomTrainer.get_model">
+<span class="sig-name descname"><span class="pre">get_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cfg</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Module</span></span></span><a class="reference internal" href="_modules/custom_trainer.html#CustomTrainer.get_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#custom_trainer.CustomTrainer.get_model" title="Link to this definition"></a></dt>
+<dd><p>Return the pre-built adapted model instead of rebuilding from config.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>cfg</strong> – Ignored. Kept for API compatibility.</p></li>
+<li><p><strong>weights</strong> – Ignored. Kept for API compatibility.</p></li>
+<li><p><strong>verbose</strong> – Ignored. Kept for API compatibility.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>The adapted detection model.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>torch.nn.Module</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="custom_trainer.CustomTrainer.save_model">
+<span class="sig-name descname"><span class="pre">save_model</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/custom_trainer.html#CustomTrainer.save_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#custom_trainer.CustomTrainer.save_model" title="Link to this definition"></a></dt>
+<dd><p>Save checkpoints with the correct adapted architecture.</p>
+<p>Overrides the default Ultralytics serialization which stores the
+original 80-class <code class="docutils literal notranslate"><span class="pre">DetectionModel</span></code>. Instead, saves the full adapted
+model — including <a class="reference internal" href="#YOLO_adapter.C2f_Adapter" title="YOLO_adapter.C2f_Adapter"><code class="xref py py-class docutils literal notranslate"><span class="pre">C2f_Adapter</span></code></a> blocks and the
+detection head with the correct number of classes — so that
+<a class="reference internal" href="#adapter_manager.AdapterManager.load_trained" title="adapter_manager.AdapterManager.load_trained"><code class="xref py py-meth docutils literal notranslate"><span class="pre">load_trained()</span></code></a> can restore it
+without any class mismatch.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class" id="module-trainer_manager">
+<dt class="sig sig-object py" id="trainer_manager.TrainerManager">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">trainer_manager.</span></span><span class="sig-name descname"><span class="pre">TrainerManager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_pt_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">runs_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">results_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nc</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mlflow_uri</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">test_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">imgsz</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">480</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/trainer_manager.html#TrainerManager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#trainer_manager.TrainerManager" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Orchestrates training and evaluation across datasets and model sizes.</p>
+<p>For each dataset a single MLflow experiment is created. Within it,
+one run per model size logs parameters, metrics and prediction artefacts.</p>
+<p>Metrics computed during <code class="docutils literal notranslate"><span class="pre">_test</span></code>:</p>
+<ul class="simple">
+<li><p><strong>mAP50 / mAP50-95</strong> — standard COCO detection metrics (global).</p></li>
+<li><p><strong>Per-class breakdown</strong> — AP50, AP50-95, Precision, Recall, F1,
+and Accuracy (TP / (TP + FP + FN)) for every class.</p></li>
+<li><p><strong>Mean IoU</strong> — average IoU of all matched (TP) detections.</p></li>
+<li><p><strong>Cell-count MAE</strong> — Mean Absolute Error between the number of
+predicted cells and ground-truth cells per image, computed by
+running inference over the test split image-by-image.</p></li>
+</ul>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>base_pt_dir</strong> (<em>str</em>) – Directory containing base YOLO <code class="docutils literal notranslate"><span class="pre">.pt</span></code> checkpoints.</p></li>
+<li><p><strong>runs_dir</strong> (<em>str</em>) – Root directory for Ultralytics run outputs.</p></li>
+<li><p><strong>results_dir</strong> (<em>str</em>) – Root directory where prediction images are saved.</p></li>
+<li><p><strong>nc</strong> (<em>int</em>) – Number of output classes.</p></li>
+<li><p><strong>mlflow_uri</strong> (<em>str</em>) – MLflow tracking URI.</p></li>
+<li><p><strong>test_dir</strong> (<em>str</em>) – Path to the test image directory.</p></li>
+<li><p><strong>imgsz</strong> (<em>int</em>) – Input image size (shorter side). Default: <code class="docutils literal notranslate"><span class="pre">480</span></code>.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="trainer_manager.TrainerManager.run">
+<span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dataset_name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">yolo_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="reference internal" href="_modules/trainer_manager.html#TrainerManager.run"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#trainer_manager.TrainerManager.run" title="Link to this definition"></a></dt>
+<dd><p>Train, evaluate and log results for one dataset/model combination.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>str</em>) – Path to the dataset YAML file.</p></li>
+<li><p><strong>dataset_name</strong> (<em>str</em>) – MLflow experiment name and run tag.</p></li>
+<li><p><strong>yolo_size</strong> (<em>str</em>) – Model size — one of <code class="docutils literal notranslate"><span class="pre">'n'</span></code>, <code class="docutils literal notranslate"><span class="pre">'s'</span></code>, <code class="docutils literal notranslate"><span class="pre">'m'</span></code>.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dict with <code class="docutils literal notranslate"><span class="pre">'map50'</span></code>, <code class="docutils literal notranslate"><span class="pre">'map50_95'</span></code> and <code class="docutils literal notranslate"><span class="pre">'weights_path'</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class" id="module-handler">
+<dt class="sig sig-object py" id="handler.YOLOAdapterHandler">
+<span class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></span><span class="sig-prename descclassname"><span class="pre">handler.</span></span><span class="sig-name descname"><span class="pre">YOLOAdapterHandler</span></span><a class="reference internal" href="_modules/handler.html#YOLOAdapterHandler"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#handler.YOLOAdapterHandler" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">BaseHandler</span></code></p>
+<p>TorchServe handler for the YOLO C2f-Adapter detection model.</p>
+<p>Applies binarization preprocessing before inference to match the
+training data distribution of the best performing model.</p>
+<p>Expected input:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span><span class="s2">&quot;image&quot;</span><span class="p">:</span> <span class="s2">&quot;&lt;base64_encoded_image&gt;&quot;</span><span class="p">}</span>
+</pre></div>
+</div>
+<p>Response:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="p">{</span>
+    <span class="s2">&quot;detections&quot;</span><span class="p">:</span> <span class="p">[</span>
+        <span class="p">{</span>
+            <span class="s2">&quot;class_id&quot;</span><span class="p">:</span>   <span class="mi">2</span><span class="p">,</span>
+            <span class="s2">&quot;class_name&quot;</span><span class="p">:</span> <span class="s2">&quot;RBC&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;confidence&quot;</span><span class="p">:</span> <span class="mf">0.91</span><span class="p">,</span>
+            <span class="s2">&quot;bbox&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;x1&quot;</span><span class="p">:</span> <span class="mi">120</span><span class="p">,</span> <span class="s2">&quot;y1&quot;</span><span class="p">:</span> <span class="mi">45</span><span class="p">,</span> <span class="s2">&quot;x2&quot;</span><span class="p">:</span> <span class="mi">210</span><span class="p">,</span> <span class="s2">&quot;y2&quot;</span><span class="p">:</span> <span class="mi">98</span><span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="handler.YOLOAdapterHandler.BINARIZE_THRESHOLD">
+<span class="sig-name descname"><span class="pre">BINARIZE_THRESHOLD</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">127</span></span><a class="headerlink" href="#handler.YOLOAdapterHandler.BINARIZE_THRESHOLD" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="handler.YOLOAdapterHandler.CLASS_NAMES">
+<span class="sig-name descname"><span class="pre">CLASS_NAMES</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">['RBC',</span> <span class="pre">'WBC',</span> <span class="pre">'Pl']</span></span><a class="headerlink" href="#handler.YOLOAdapterHandler.CLASS_NAMES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="handler.YOLOAdapterHandler.CONF_THRESHOLD">
+<span class="sig-name descname"><span class="pre">CONF_THRESHOLD</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0.25</span></span><a class="headerlink" href="#handler.YOLOAdapterHandler.CONF_THRESHOLD" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="handler.YOLOAdapterHandler.IMGSZ">
+<span class="sig-name descname"><span class="pre">IMGSZ</span></span><span class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">640</span></span><a class="headerlink" href="#handler.YOLOAdapterHandler.IMGSZ" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="handler.YOLOAdapterHandler.inference">
+<span class="sig-name descname"><span class="pre">inference</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">img</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Image</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/handler.html#YOLOAdapterHandler.inference"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#handler.YOLOAdapterHandler.inference" title="Link to this definition"></a></dt>
+<dd><p>Run YOLO detection on the preprocessed image.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>img</strong> (<em>PIL.Image.Image</em>) – Binarized PIL Image in RGB format.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Ultralytics prediction result object.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="handler.YOLOAdapterHandler.initialize">
+<span class="sig-name descname"><span class="pre">initialize</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">context</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="_modules/handler.html#YOLOAdapterHandler.initialize"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#handler.YOLOAdapterHandler.initialize" title="Link to this definition"></a></dt>
+<dd><p>Load the adapted YOLO model from the MAR archive.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>context</strong> – TorchServe context object.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="handler.YOLOAdapterHandler.postprocess">
+<span class="sig-name descname"><span class="pre">postprocess</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">result</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="reference internal" href="_modules/handler.html#YOLOAdapterHandler.postprocess"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#handler.YOLOAdapterHandler.postprocess" title="Link to this definition"></a></dt>
+<dd><p>Convert Ultralytics result to a JSON-serializable detection list.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>result</strong> – Single Ultralytics prediction result object.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>List containing one JSON string with <code class="docutils literal notranslate"><span class="pre">'detections'</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list[str]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="handler.YOLOAdapterHandler.preprocess">
+<span class="sig-name descname"><span class="pre">preprocess</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Image</span></span></span><a class="reference internal" href="_modules/handler.html#YOLOAdapterHandler.preprocess"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#handler.YOLOAdapterHandler.preprocess" title="Link to this definition"></a></dt>
+<dd><p>Decode Base64 image and apply binarization.</p>
+<p>Converts to grayscale, applies fixed-threshold binarization to
+match the training preprocessing of the best performing model
+(yolov8m + binarize), then converts back to RGB for YOLO.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>data</strong> – List of request dicts with a <code class="docutils literal notranslate"><span class="pre">body</span></code> key.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Binarized PIL Image in RGB format.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>PIL.Image.Image</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="Electronic Symbol Detector" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="data_management.html" class="btn btn-neutral float-right" title="Data Management" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

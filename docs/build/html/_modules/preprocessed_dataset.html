@@ -1,0 +1,594 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>preprocessed_dataset &mdash; Electronic Symbol Detector 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=fd6eb6e6"></script>
+      <script src="../_static/sphinx_highlight.js?v=6ffebe34"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            Electronic Symbol Detector
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../model.html">Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../data_management.html">Data Management</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">Electronic Symbol Detector</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">Module code</a></li>
+      <li class="breadcrumb-item active">preprocessed_dataset</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for preprocessed_dataset</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">cv2</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">shutil</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">yaml</span>
+
+
+<div class="viewcode-block" id="PreprocessedDataset">
+<a class="viewcode-back" href="../data_management.html#preprocessed_dataset.PreprocessedDataset">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">PreprocessedDataset</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Generates a preprocessed copy of a YOLO dataset for blood-cell microscopy.</span>
+
+<span class="sd">    Expects the source dataset to follow standard YOLO layout::</span>
+
+<span class="sd">        source_root/</span>
+<span class="sd">          train/</span>
+<span class="sd">            images/</span>
+<span class="sd">            labels/</span>
+<span class="sd">          val/</span>
+<span class="sd">            images/</span>
+<span class="sd">            labels/</span>
+<span class="sd">          test/</span>
+<span class="sd">            images/</span>
+<span class="sd">            labels/</span>
+
+<span class="sd">    Each call to :meth:`generate` produces a new dataset variant under</span>
+<span class="sd">    ``output_base/&lt;output_name&gt;/`` and writes the corresponding YOLO</span>
+<span class="sd">    ``&lt;output_name&gt;.yaml`` config to ``cfg_dir/``.</span>
+
+<span class="sd">    **Available preprocessing operations:**</span>
+
+<span class="sd">    * ``clahe``          — Contrast-Limited Adaptive Histogram Equalisation in</span>
+<span class="sd">                           LAB space. Improves local contrast without saturating</span>
+<span class="sd">                           colours. Recommended first choice for Giemsa-stained slides.</span>
+<span class="sd">    * ``stain_normalize``— Normalises stain intensity to a fixed reference mean/std</span>
+<span class="sd">                           in LAB space (simplified Macenko-style). Reduces batch-to-</span>
+<span class="sd">                           batch colour variation caused by different staining protocols.</span>
+<span class="sd">    * ``gamma``          — Power-law intensity correction. Values &lt; 1 brighten dark</span>
+<span class="sd">                           slides; values &gt; 1 darken over-exposed ones.</span>
+<span class="sd">    * ``denoise``        — Non-local means colour denoising. Removes sensor noise</span>
+<span class="sd">                           while preserving cell membrane edges.</span>
+<span class="sd">    * ``morph_erode``    — Morphological erosion with an elliptical kernel.</span>
+<span class="sd">                           Slightly shrinks bright foreground regions. Useful to</span>
+<span class="sd">                           separate touching cells in dense fields.</span>
+<span class="sd">    * ``morph_dilate``   — Morphological dilation with an elliptical kernel.</span>
+<span class="sd">                           Slightly expands bright foreground regions.</span>
+<span class="sd">    * ``none``           — No-op: copies images unchanged (useful as baseline).</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">        ``binarize`` has been intentionally removed: it destroys all colour and</span>
+<span class="sd">        tonal information that the detector relies on for cell classification.</span>
+
+<span class="sd">    :param source_yaml: Path to the source YOLO dataset ``.yaml`` config file.</span>
+<span class="sd">    :type source_yaml: str</span>
+<span class="sd">    :param output_base: Parent directory for all generated variants. Defaults to</span>
+<span class="sd">        the directory that contains the source dataset root.</span>
+<span class="sd">    :type output_base: str | None</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c1"># Reference LAB statistics used by stain_normalize.</span>
+    <span class="c1"># Derived from a representative Giemsa-stained blood smear.</span>
+    <span class="n">_STAIN_REF_MEAN</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">198.0</span><span class="p">,</span> <span class="mf">135.0</span><span class="p">,</span> <span class="mf">120.0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+    <span class="n">_STAIN_REF_STD</span>  <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>  <span class="mf">25.0</span><span class="p">,</span>  <span class="mf">12.0</span><span class="p">,</span>  <span class="mf">14.0</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">source_yaml</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">output_base</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_source_cfg</span>  <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_read_yaml</span><span class="p">(</span><span class="n">source_yaml</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_source_root</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_source_cfg</span><span class="p">[</span><span class="s2">&quot;path&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">rstrip</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_output_base</span> <span class="o">=</span> <span class="n">output_base</span> <span class="ow">or</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_source_root</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_dataset_cfg</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;nc&quot;</span><span class="p">:</span>    <span class="bp">self</span><span class="o">.</span><span class="n">_source_cfg</span><span class="p">[</span><span class="s2">&quot;nc&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;names&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_source_cfg</span><span class="p">[</span><span class="s2">&quot;names&quot;</span><span class="p">],</span>
+        <span class="p">}</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Public API</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="PreprocessedDataset.generate">
+<a class="viewcode-back" href="../data_management.html#preprocessed_dataset.PreprocessedDataset.generate">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">generate</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">output_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">op</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="c1"># CLAHE</span>
+        <span class="n">clahe_clip_limit</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">3.0</span><span class="p">,</span>
+        <span class="n">clahe_tile_grid</span><span class="p">:</span>  <span class="nb">tuple</span>  <span class="o">=</span> <span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span>
+        <span class="c1"># Morphological ops</span>
+        <span class="n">morph_kernel</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span>
+        <span class="c1"># Gamma correction</span>
+        <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="c1"># Denoising</span>
+        <span class="n">denoise_h</span><span class="p">:</span>         <span class="nb">int</span> <span class="o">=</span> <span class="mi">6</span><span class="p">,</span>
+        <span class="n">denoise_template</span><span class="p">:</span>  <span class="nb">int</span> <span class="o">=</span> <span class="mi">7</span><span class="p">,</span>
+        <span class="n">denoise_search</span><span class="p">:</span>    <span class="nb">int</span> <span class="o">=</span> <span class="mi">21</span><span class="p">,</span>
+        <span class="c1"># Stain normalisation</span>
+        <span class="n">stain_ref_mean</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">stain_ref_std</span><span class="p">:</span>  <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="c1"># Output location</span>
+        <span class="n">cfg_dir</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;/app/model_storage/yolo_cfg&quot;</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate a preprocessed dataset variant.</span>
+
+<span class="sd">        All splits (train / val / test) are processed identically so that</span>
+<span class="sd">        inference conditions match training conditions.</span>
+
+<span class="sd">        :param output_name: Name of the output subdirectory and YAML file.</span>
+<span class="sd">        :type output_name: str</span>
+<span class="sd">        :param op: Preprocessing operation to apply. One of ``&#39;clahe&#39;``,</span>
+<span class="sd">            ``&#39;stain_normalize&#39;``, ``&#39;gamma&#39;``, ``&#39;denoise&#39;``,</span>
+<span class="sd">            ``&#39;morph_erode&#39;``, ``&#39;morph_dilate&#39;``, ``&#39;none&#39;``.</span>
+<span class="sd">        :type op: str</span>
+<span class="sd">        :param clahe_clip_limit: CLAHE clip limit. Higher values increase</span>
+<span class="sd">            contrast enhancement but risk noise amplification. Default ``3.0``.</span>
+<span class="sd">        :type clahe_clip_limit: float</span>
+<span class="sd">        :param clahe_tile_grid: CLAHE tile grid size ``(rows, cols)``.</span>
+<span class="sd">            Default ``(8, 8)``.</span>
+<span class="sd">        :type clahe_tile_grid: tuple</span>
+<span class="sd">        :param morph_kernel: Side length of the elliptical structuring element</span>
+<span class="sd">            for erosion/dilation. Default ``3``.</span>
+<span class="sd">        :type morph_kernel: int</span>
+<span class="sd">        :param gamma: Gamma value for power-law correction. ``&lt; 1`` brightens,</span>
+<span class="sd">            ``&gt; 1`` darkens. Default ``1.0`` (identity).</span>
+<span class="sd">        :type gamma: float</span>
+<span class="sd">        :param denoise_h: Filter strength for non-local means denoising.</span>
+<span class="sd">            Higher = smoother, but may blur fine cell detail. Default ``6``.</span>
+<span class="sd">        :type denoise_h: int</span>
+<span class="sd">        :param denoise_template: Template window size for denoising. Default ``7``.</span>
+<span class="sd">        :type denoise_template: int</span>
+<span class="sd">        :param denoise_search: Search window size for denoising. Default ``21``.</span>
+<span class="sd">        :type denoise_search: int</span>
+<span class="sd">        :param stain_ref_mean: Target LAB mean ``[L, A, B]`` for stain</span>
+<span class="sd">            normalisation. Defaults to a built-in Giemsa reference.</span>
+<span class="sd">        :type stain_ref_mean: np.ndarray | None</span>
+<span class="sd">        :param stain_ref_std: Target LAB std ``[L, A, B]`` for stain</span>
+<span class="sd">            normalisation. Defaults to a built-in Giemsa reference.</span>
+<span class="sd">        :type stain_ref_std: np.ndarray | None</span>
+<span class="sd">        :param cfg_dir: Directory where the output YAML config is written.</span>
+<span class="sd">        :type cfg_dir: str</span>
+<span class="sd">        :return: Absolute path to the generated YAML config file.</span>
+<span class="sd">        :rtype: str</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">output_root</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_output_base</span><span class="p">,</span> <span class="n">output_name</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">output_root</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[PreprocessedDataset] Already exists, skipping: </span><span class="si">{</span><span class="n">output_root</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">cfg_dir</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">output_name</span><span class="si">}</span><span class="s2">.yaml&quot;</span><span class="p">)</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[PreprocessedDataset] Generating &#39;</span><span class="si">{</span><span class="n">output_name</span><span class="si">}</span><span class="s2">&#39; with op=&#39;</span><span class="si">{</span><span class="n">op</span><span class="si">}</span><span class="s2">&#39;...&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Build per-op stateful objects once, reuse across all images</span>
+        <span class="n">clahe_obj</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">createCLAHE</span><span class="p">(</span>
+            <span class="n">clipLimit</span><span class="o">=</span><span class="n">clahe_clip_limit</span><span class="p">,</span>
+            <span class="n">tileGridSize</span><span class="o">=</span><span class="n">clahe_tile_grid</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">gamma_lut</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_build_gamma_lut</span><span class="p">(</span><span class="n">gamma</span><span class="p">)</span>
+        <span class="n">ref_mean</span>  <span class="o">=</span> <span class="n">stain_ref_mean</span> <span class="k">if</span> <span class="n">stain_ref_mean</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_STAIN_REF_MEAN</span>
+        <span class="n">ref_std</span>   <span class="o">=</span> <span class="n">stain_ref_std</span>  <span class="k">if</span> <span class="n">stain_ref_std</span>  <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">_STAIN_REF_STD</span>
+
+        <span class="k">for</span> <span class="n">split</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;train&quot;</span><span class="p">,</span> <span class="s2">&quot;val&quot;</span><span class="p">,</span> <span class="s2">&quot;test&quot;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_process_split</span><span class="p">(</span>
+                <span class="n">split</span>      <span class="o">=</span> <span class="n">split</span><span class="p">,</span>
+                <span class="n">src_root</span>   <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_source_root</span><span class="p">,</span>
+                <span class="n">dst_root</span>   <span class="o">=</span> <span class="n">output_root</span><span class="p">,</span>
+                <span class="n">op</span>         <span class="o">=</span> <span class="n">op</span><span class="p">,</span>
+                <span class="n">clahe_obj</span>  <span class="o">=</span> <span class="n">clahe_obj</span><span class="p">,</span>
+                <span class="n">gamma_lut</span>  <span class="o">=</span> <span class="n">gamma_lut</span><span class="p">,</span>
+                <span class="n">morph_kernel</span> <span class="o">=</span> <span class="n">morph_kernel</span><span class="p">,</span>
+                <span class="n">denoise_h</span>        <span class="o">=</span> <span class="n">denoise_h</span><span class="p">,</span>
+                <span class="n">denoise_template</span> <span class="o">=</span> <span class="n">denoise_template</span><span class="p">,</span>
+                <span class="n">denoise_search</span>   <span class="o">=</span> <span class="n">denoise_search</span><span class="p">,</span>
+                <span class="n">ref_mean</span>   <span class="o">=</span> <span class="n">ref_mean</span><span class="p">,</span>
+                <span class="n">ref_std</span>    <span class="o">=</span> <span class="n">ref_std</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">cfg_dir</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">cfg_yaml_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">cfg_dir</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">output_name</span><span class="si">}</span><span class="s2">.yaml&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_write_yaml</span><span class="p">(</span><span class="n">cfg_yaml_path</span><span class="p">,</span> <span class="n">output_root</span><span class="p">)</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[PreprocessedDataset] Done → </span><span class="si">{</span><span class="n">cfg_yaml_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">cfg_yaml_path</span></div>
+
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Split processing</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_process_split</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">split</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">src_root</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">dst_root</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">op</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">clahe_obj</span><span class="p">,</span>
+        <span class="n">gamma_lut</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">morph_kernel</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">denoise_h</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">denoise_template</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">denoise_search</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">ref_mean</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">ref_std</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">img_src</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">src_root</span><span class="p">,</span> <span class="n">split</span><span class="p">,</span> <span class="s2">&quot;images&quot;</span><span class="p">)</span>
+        <span class="n">ann_src</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">src_root</span><span class="p">,</span> <span class="n">split</span><span class="p">,</span> <span class="s2">&quot;labels&quot;</span><span class="p">)</span>
+        <span class="n">img_dst</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dst_root</span><span class="p">,</span> <span class="n">split</span><span class="p">,</span> <span class="s2">&quot;images&quot;</span><span class="p">)</span>
+        <span class="n">ann_dst</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dst_root</span><span class="p">,</span> <span class="n">split</span><span class="p">,</span> <span class="s2">&quot;labels&quot;</span><span class="p">)</span>
+
+        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">img_dst</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">ann_dst</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="c1"># Labels: always copy as-is (preprocessing is image-only)</span>
+        <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">ann_src</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">fname</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">ann_src</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">fname</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.txt&quot;</span><span class="p">):</span>
+                    <span class="n">shutil</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span>
+                        <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ann_src</span><span class="p">,</span> <span class="n">fname</span><span class="p">),</span>
+                        <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">ann_dst</span><span class="p">,</span> <span class="n">fname</span><span class="p">),</span>
+                    <span class="p">)</span>
+
+        <span class="c1"># Images: apply the selected operation</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isdir</span><span class="p">(</span><span class="n">img_src</span><span class="p">):</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[PreprocessedDataset] images dir not found, skipping: </span><span class="si">{</span><span class="n">img_src</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">for</span> <span class="n">fname</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">listdir</span><span class="p">(</span><span class="n">img_src</span><span class="p">):</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">fname</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">endswith</span><span class="p">((</span><span class="s2">&quot;.jpg&quot;</span><span class="p">,</span> <span class="s2">&quot;.jpeg&quot;</span><span class="p">,</span> <span class="s2">&quot;.png&quot;</span><span class="p">)):</span>
+                <span class="k">continue</span>
+            <span class="n">img</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">imread</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">img_src</span><span class="p">,</span> <span class="n">fname</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">img</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;[PreprocessedDataset] Could not read </span><span class="si">{</span><span class="n">fname</span><span class="si">}</span><span class="s2">, skipping.&quot;</span><span class="p">)</span>
+                <span class="k">continue</span>
+
+            <span class="n">processed</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_apply_op</span><span class="p">(</span>
+                <span class="n">img</span><span class="p">,</span>
+                <span class="n">op</span>            <span class="o">=</span> <span class="n">op</span><span class="p">,</span>
+                <span class="n">clahe_obj</span>     <span class="o">=</span> <span class="n">clahe_obj</span><span class="p">,</span>
+                <span class="n">gamma_lut</span>     <span class="o">=</span> <span class="n">gamma_lut</span><span class="p">,</span>
+                <span class="n">morph_kernel</span>  <span class="o">=</span> <span class="n">morph_kernel</span><span class="p">,</span>
+                <span class="n">denoise_h</span>         <span class="o">=</span> <span class="n">denoise_h</span><span class="p">,</span>
+                <span class="n">denoise_template</span>  <span class="o">=</span> <span class="n">denoise_template</span><span class="p">,</span>
+                <span class="n">denoise_search</span>    <span class="o">=</span> <span class="n">denoise_search</span><span class="p">,</span>
+                <span class="n">ref_mean</span>      <span class="o">=</span> <span class="n">ref_mean</span><span class="p">,</span>
+                <span class="n">ref_std</span>       <span class="o">=</span> <span class="n">ref_std</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="n">out_name</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="n">fname</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="s2">&quot;.jpg&quot;</span>
+            <span class="n">cv2</span><span class="o">.</span><span class="n">imwrite</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">img_dst</span><span class="p">,</span> <span class="n">out_name</span><span class="p">),</span> <span class="n">processed</span><span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Operations</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_apply_op</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">img</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">op</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">clahe_obj</span><span class="p">,</span>
+        <span class="n">gamma_lut</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">morph_kernel</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">denoise_h</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">denoise_template</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">denoise_search</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">ref_mean</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">ref_std</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Dispatch to the appropriate preprocessing method.</span>
+
+<span class="sd">        :param img: Input BGR image as a NumPy array.</span>
+<span class="sd">        :type img: np.ndarray</span>
+<span class="sd">        :param op: Operation name string.</span>
+<span class="sd">        :type op: str</span>
+<span class="sd">        :return: Preprocessed BGR image.</span>
+<span class="sd">        :rtype: np.ndarray</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">op</span> <span class="o">==</span> <span class="s2">&quot;clahe&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_clahe</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">clahe_obj</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">op</span> <span class="o">==</span> <span class="s2">&quot;stain_normalize&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_stain_normalize</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">ref_mean</span><span class="p">,</span> <span class="n">ref_std</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">op</span> <span class="o">==</span> <span class="s2">&quot;gamma&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_gamma</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">gamma_lut</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">op</span> <span class="o">==</span> <span class="s2">&quot;denoise&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_denoise</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">denoise_h</span><span class="p">,</span> <span class="n">denoise_template</span><span class="p">,</span> <span class="n">denoise_search</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">op</span> <span class="o">==</span> <span class="s2">&quot;morph_erode&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_morph</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">MORPH_ERODE</span><span class="p">,</span> <span class="n">morph_kernel</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">op</span> <span class="o">==</span> <span class="s2">&quot;morph_dilate&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_morph</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">MORPH_DILATE</span><span class="p">,</span> <span class="n">morph_kernel</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">op</span> <span class="o">==</span> <span class="s2">&quot;none&quot;</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">img</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;[PreprocessedDataset] Unknown op &#39;</span><span class="si">{</span><span class="n">op</span><span class="si">}</span><span class="s2">&#39;. &quot;</span>
+            <span class="s2">&quot;Choose from: clahe, stain_normalize, gamma, denoise, &quot;</span>
+            <span class="s2">&quot;morph_erode, morph_dilate, none.&quot;</span>
+        <span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_clahe</span><span class="p">(</span><span class="n">img</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">clahe_obj</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply CLAHE to the L channel in LAB colour space.</span>
+
+<span class="sd">        Operating in LAB isolates luminance from colour, so hue and</span>
+<span class="sd">        saturation of the Giemsa stain are preserved while local contrast</span>
+<span class="sd">        is improved.</span>
+
+<span class="sd">        :param img: Input BGR image.</span>
+<span class="sd">        :param clahe_obj: Pre-built ``cv2.CLAHE`` instance.</span>
+<span class="sd">        :return: Contrast-enhanced BGR image.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">lab</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_BGR2LAB</span><span class="p">)</span>
+        <span class="n">l</span><span class="p">,</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">lab</span><span class="p">)</span>
+        <span class="n">lab</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">merge</span><span class="p">([</span><span class="n">clahe_obj</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">l</span><span class="p">),</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">lab</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_LAB2BGR</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_stain_normalize</span><span class="p">(</span>
+        <span class="n">img</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">ref_mean</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">ref_std</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Normalise stain intensity to a fixed LAB reference distribution.</span>
+
+<span class="sd">        This is a simplified Macenko-style normalisation that works entirely</span>
+<span class="sd">        in LAB space without SVD, making it fast and robust to outliers.</span>
+<span class="sd">        It shifts and scales each LAB channel so that the image&#39;s mean and</span>
+<span class="sd">        standard deviation match those of the reference slide.</span>
+
+<span class="sd">        :param img: Input BGR image.</span>
+<span class="sd">        :param ref_mean: Target LAB mean ``[L, A, B]``.</span>
+<span class="sd">        :param ref_std: Target LAB std ``[L, A, B]``.</span>
+<span class="sd">        :return: Stain-normalised BGR image.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">lab</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_BGR2LAB</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">ch</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+            <span class="n">channel</span> <span class="o">=</span> <span class="n">lab</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">ch</span><span class="p">]</span>
+            <span class="n">ch_mean</span> <span class="o">=</span> <span class="n">channel</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+            <span class="n">ch_std</span>  <span class="o">=</span> <span class="n">channel</span><span class="o">.</span><span class="n">std</span><span class="p">()</span> <span class="o">+</span> <span class="mf">1e-6</span>          <span class="c1"># avoid division by zero</span>
+            <span class="c1"># z-score then rescale to reference distribution</span>
+            <span class="n">lab</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">ch</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">channel</span> <span class="o">-</span> <span class="n">ch_mean</span><span class="p">)</span> <span class="o">/</span> <span class="n">ch_std</span> <span class="o">*</span> <span class="n">ref_std</span><span class="p">[</span><span class="n">ch</span><span class="p">]</span> <span class="o">+</span> <span class="n">ref_mean</span><span class="p">[</span><span class="n">ch</span><span class="p">]</span>
+        <span class="n">lab</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">lab</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">lab</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_LAB2BGR</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_gamma</span><span class="p">(</span><span class="n">img</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">lut</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply power-law gamma correction via a precomputed LUT.</span>
+
+<span class="sd">        :param img: Input BGR image.</span>
+<span class="sd">        :param lut: 256-entry uint8 look-up table.</span>
+<span class="sd">        :return: Gamma-corrected BGR image.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">cv2</span><span class="o">.</span><span class="n">LUT</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">lut</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_denoise</span><span class="p">(</span>
+        <span class="n">img</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">h</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">template_window</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">search_window</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Remove sensor noise with non-local means colour denoising.</span>
+
+<span class="sd">        Preserves cell membrane edges better than simple Gaussian blur.</span>
+
+<span class="sd">        :param img: Input BGR image.</span>
+<span class="sd">        :param h: Filter strength (higher = smoother, may blur fine detail).</span>
+<span class="sd">        :param template_window: Template patch size in pixels (odd number).</span>
+<span class="sd">        :param search_window: Search region size in pixels (odd number).</span>
+<span class="sd">        :return: Denoised BGR image.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">cv2</span><span class="o">.</span><span class="n">fastNlMeansDenoisingColored</span><span class="p">(</span>
+            <span class="n">img</span><span class="p">,</span>
+            <span class="kc">None</span><span class="p">,</span>
+            <span class="n">h</span><span class="p">,</span>
+            <span class="n">h</span><span class="p">,</span>
+            <span class="n">template_window</span><span class="p">,</span>
+            <span class="n">search_window</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_morph</span><span class="p">(</span><span class="n">img</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">morph_op</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Apply morphological erosion or dilation with an elliptical kernel.</span>
+
+<span class="sd">        An elliptical structuring element is more appropriate than a</span>
+<span class="sd">        rectangular one for round/oval blood cells.</span>
+
+<span class="sd">        :param img: Input BGR image.</span>
+<span class="sd">        :param morph_op: OpenCV morphological operation constant</span>
+<span class="sd">            (e.g. ``cv2.MORPH_ERODE`` or ``cv2.MORPH_DILATE``).</span>
+<span class="sd">        :param kernel_size: Diameter of the elliptical kernel in pixels.</span>
+<span class="sd">        :return: Morphologically processed BGR image.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">kernel</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">getStructuringElement</span><span class="p">(</span>
+            <span class="n">cv2</span><span class="o">.</span><span class="n">MORPH_ELLIPSE</span><span class="p">,</span>
+            <span class="p">(</span><span class="n">kernel_size</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">cv2</span><span class="o">.</span><span class="n">morphologyEx</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">morph_op</span><span class="p">,</span> <span class="n">kernel</span><span class="p">)</span>
+
+    <span class="c1"># ------------------------------------------------------------------</span>
+    <span class="c1"># Utilities</span>
+    <span class="c1"># ------------------------------------------------------------------</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_gamma_lut</span><span class="p">(</span><span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Build a 256-entry uint8 look-up table for gamma correction.</span>
+
+<span class="sd">        :param gamma: Gamma exponent. ``&lt; 1`` brightens, ``&gt; 1`` darkens.</span>
+<span class="sd">        :type gamma: float</span>
+<span class="sd">        :return: 256-entry uint8 NumPy array.</span>
+<span class="sd">        :rtype: np.ndarray</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">inv_gamma</span> <span class="o">=</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="nb">max</span><span class="p">(</span><span class="n">gamma</span><span class="p">,</span> <span class="mf">1e-6</span><span class="p">)</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+            <span class="p">[((</span><span class="n">i</span> <span class="o">/</span> <span class="mf">255.0</span><span class="p">)</span> <span class="o">**</span> <span class="n">inv_gamma</span><span class="p">)</span> <span class="o">*</span> <span class="mi">255</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">256</span><span class="p">)],</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">table</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_write_yaml</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">yaml_save_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">dataset_root</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Write a YOLO-compatible dataset config YAML.</span>
+
+<span class="sd">        :param yaml_save_path: Destination path for the ``.yaml`` file.</span>
+<span class="sd">        :type yaml_save_path: str</span>
+<span class="sd">        :param dataset_root: Absolute path to the processed dataset root.</span>
+<span class="sd">        :type dataset_root: str</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">cfg</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;path&quot;</span><span class="p">:</span>  <span class="n">dataset_root</span><span class="p">,</span>
+            <span class="s2">&quot;train&quot;</span><span class="p">:</span> <span class="s2">&quot;train/images&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;val&quot;</span><span class="p">:</span>   <span class="s2">&quot;val/images&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;test&quot;</span><span class="p">:</span>  <span class="s2">&quot;test/images&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;nc&quot;</span><span class="p">:</span>    <span class="bp">self</span><span class="o">.</span><span class="n">_dataset_cfg</span><span class="p">[</span><span class="s2">&quot;nc&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;names&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_dataset_cfg</span><span class="p">[</span><span class="s2">&quot;names&quot;</span><span class="p">],</span>
+        <span class="p">}</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">yaml_save_path</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">yaml</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">default_flow_style</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">allow_unicode</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_read_yaml</span><span class="p">(</span><span class="n">yaml_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">yaml_path</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span></div>
+
+
+
+<span class="c1"># ----------------------------------------------------------------------</span>
+<span class="c1"># Entry point</span>
+<span class="c1"># ----------------------------------------------------------------------</span>
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">preprocessor</span> <span class="o">=</span> <span class="n">PreprocessedDataset</span><span class="p">(</span>
+        <span class="n">source_yaml</span>  <span class="o">=</span> <span class="s2">&quot;/app/model_storage/yolo_cfg/dataset.yaml&quot;</span><span class="p">,</span>
+        <span class="n">output_base</span>  <span class="o">=</span> <span class="s2">&quot;/app/data&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># CLAHE: best general-purpose choice for Giemsa-stained slides</span>
+    <span class="n">preprocessor</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
+        <span class="n">output_name</span>      <span class="o">=</span> <span class="s2">&quot;aug_data_clahe&quot;</span><span class="p">,</span>
+        <span class="n">op</span>               <span class="o">=</span> <span class="s2">&quot;clahe&quot;</span><span class="p">,</span>
+        <span class="n">clahe_clip_limit</span> <span class="o">=</span> <span class="mf">3.0</span><span class="p">,</span>
+        <span class="n">clahe_tile_grid</span>  <span class="o">=</span> <span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Stain normalisation: useful when slides come from multiple batches</span>
+    <span class="n">preprocessor</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
+        <span class="n">output_name</span> <span class="o">=</span> <span class="s2">&quot;aug_data_stain_norm&quot;</span><span class="p">,</span>
+        <span class="n">op</span>          <span class="o">=</span> <span class="s2">&quot;stain_normalize&quot;</span><span class="p">,</span>
+        <span class="c1"># Override reference stats here if you have a preferred reference slide:</span>
+        <span class="c1"># stain_ref_mean = np.array([195.0, 133.0, 118.0]),</span>
+        <span class="c1"># stain_ref_std  = np.array([22.0, 11.0, 13.0]),</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Gamma correction: brighten under-exposed slides</span>
+    <span class="n">preprocessor</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
+        <span class="n">output_name</span> <span class="o">=</span> <span class="s2">&quot;aug_data_gamma_08&quot;</span><span class="p">,</span>
+        <span class="n">op</span>          <span class="o">=</span> <span class="s2">&quot;gamma&quot;</span><span class="p">,</span>
+        <span class="n">gamma</span>       <span class="o">=</span> <span class="mf">0.8</span><span class="p">,</span>   <span class="c1"># &lt; 1 → brightens</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Denoising: reduce sensor noise before training</span>
+    <span class="n">preprocessor</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
+        <span class="n">output_name</span>      <span class="o">=</span> <span class="s2">&quot;aug_data_denoise&quot;</span><span class="p">,</span>
+        <span class="n">op</span>               <span class="o">=</span> <span class="s2">&quot;denoise&quot;</span><span class="p">,</span>
+        <span class="n">denoise_h</span>        <span class="o">=</span> <span class="mi">6</span><span class="p">,</span>
+        <span class="n">denoise_template</span> <span class="o">=</span> <span class="mi">7</span><span class="p">,</span>
+        <span class="n">denoise_search</span>   <span class="o">=</span> <span class="mi">21</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Morphological ops: use sparingly for dense cell separation</span>
+    <span class="n">preprocessor</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
+        <span class="n">output_name</span>  <span class="o">=</span> <span class="s2">&quot;aug_data_morph_erode&quot;</span><span class="p">,</span>
+        <span class="n">op</span>           <span class="o">=</span> <span class="s2">&quot;morph_erode&quot;</span><span class="p">,</span>
+        <span class="n">morph_kernel</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">preprocessor</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span>
+        <span class="n">output_name</span>  <span class="o">=</span> <span class="s2">&quot;aug_data_morph_dilate&quot;</span><span class="p">,</span>
+        <span class="n">op</span>           <span class="o">=</span> <span class="s2">&quot;morph_dilate&quot;</span><span class="p">,</span>
+        <span class="n">morph_kernel</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span>
+    <span class="p">)</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2026.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
