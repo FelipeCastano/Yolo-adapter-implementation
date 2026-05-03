@@ -75,7 +75,7 @@ services:
       dockerfile: Dockerfile_marbuilder
     volumes:
       - ../model_storage:/app/model_storage
-      - ../src:/app/
+      - ../src/model:/app/src/model
     working_dir: /app
     command: /app/model_storage/create_mar.sh
     networks:
